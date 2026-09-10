@@ -19,6 +19,12 @@
       "reden": "Het account WAAROVER de plaat rapporteert. stack-control en de bewaakte repo's blijven persoonlijk; dit aan GITHUB_REPOSITORY koppelen laat de plaat na de overdracht over een lege organisatie rapporteren."
     },
     {
+      "pad": "scripts/lib/collect.mjs",
+      "tekst": "owner: 'rvanhooijdonk-png',",
+      "blijft": "ANDER_OBJECT",
+      "reden": "De vaste METER-bron is stack-control, een afzonderlijk bronobject dat niet met stack-dashboard wordt overgedragen. Deze private immutable binding staat los van de configureerbare dashboard-eigenaar."
+    },
+    {
       "pad": "scripts/doorstroom.mjs",
       "tekst": "'rvanhooijdonk-png/stack-control'",
       "blijft": "ANDER_OBJECT",

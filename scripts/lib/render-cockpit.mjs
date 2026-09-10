@@ -1,3 +1,4 @@
+import { renderMeter } from './meter-feed-view.mjs';
 /** Rustige cockpit en drill-downs; pure renderers op reeds gesaneerde modellen. */
 import { esc, num, buildStamp, titelStamp, STYLE, TRUST_LABEL, bronstandMerk } from './render.mjs';
 import { list } from './format.mjs';
@@ -204,7 +205,7 @@ function incidentFacts(snapshot, runtimeFeed) {
 }
 
 export function renderCockpit(snapshot, {
-  products, ticker, runtimeFeed, refreshSeconds = 10, preview = false, clientPollOrigin = null,
+  products, ticker, runtimeFeed, meterText = null, refreshSeconds = 10, preview = false, clientPollOrigin = null,
   // Wandklok van het bouwmoment. Bewust apart van `snapshot.generatedAt`: dat is het moment waarop
   // de bron is verzameld, en bij een cache-fallback loopt dat achter op de bouw. Alleen zo kan
   // STATUSGEN zien dat de plaat op oude data draait.
@@ -251,7 +252,7 @@ ${renderPanelSlots({ b: richardQueueVulling, k: nuBezigVulling, statusgen: statu
 <section id="vandaag-geleverd" class="card"><h2>Vandaag geleverd</h2>${snapshot.planning?.available ? list(delivered.map((f) => `<li>${featureName(f)}</li>`), 'Niets met een gevalideerde opleverdatum van vandaag.') : '<p class="unknown">UNKNOWN — planningbron niet beschikbaar.</p>'}</section>
 <section id="producten" class="card wide"><h2>Producten</h2><div class="product-grid">${productCards.join('')}</div></section>
 <section id="incidenten" class="card"><h2>Incidenten</h2>${incidents.length ? `<ul class="lights incident-list">${incidents.map((x) => `<li><span class="repo">${esc(x.label)}</span> <span class="unknown">${esc(x.detail)}</span></li>`).join('')}</ul>` : '<p class="empty">Geen gevalideerde bron-, vloot- of CI-incidenten.</p>'}</section>
-${renderAccounts(runtimeFeed)}
+${renderAccounts(runtimeFeed).replace('</section>', `${renderMeter(meterText, { now, live: false })}</section>`)}
 <section id="laatste-ticker-events" class="card wide"><h2>Laatste ticker-events</h2><p class="muted">${ticker?.freshness === 'CURRENT' ? 'CURRENT — statische snapshot' : `${esc(ticker?.freshness ?? 'UNKNOWN')} — actualiteit niet bevestigd`}. GitHub-data is niet realtime. De volledige tijdlijn staat op STACK-TICKER.</p>${events.length ? `<ul class="lights ticker-summary">${events.join('')}</ul>` : '<p class="empty">Geen gevalideerde lifecycle-events.</p>'}</section>`;
   return page(snapshot, 'Richards cockpit', body, '<a href="./producten.html">Producten</a><a href="./stack-ticker.html">STACK-TICKER</a><a href="./contentstroom.html">Technische drill-down</a>', refreshSeconds, './', clientPollOrigin);
 }
