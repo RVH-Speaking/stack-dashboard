@@ -19,6 +19,9 @@ test('standalone has accessible mobile shell, navigation, filters and explicit u
     /id="health-heading"/, /id="subscriptions-heading"/, /id="resets-heading"/]) assert.match(html, expression);
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%/);
+  const staleStatic = renderMeterPage(text, { now: new Date('2026-09-10T09:06:00.000Z') });
+  assert.doesNotMatch(staleStatic, /data-meter-countdown|value="50"|50%|data-status="VEROUDERD"/);
+  assert.equal((staleStatic.match(/data-status="ONBEKEND"/g) ?? []).length, 7);
 });
 
 test('mobile layout permits shrinking without clipping navigation, filters or metrics', () => {
@@ -61,16 +64,31 @@ test('live overview separates publication from source and exposes all windows wi
   assert.doesNotMatch(gemini, /<meter |data-meter-countdown/);
 });
 
-test('five-minute boundary and reset transition stop capacity and calendar until fresh evidence', () => {
+test('five-minute boundary labels historical capacity and reset while stopping countdown and calendar', () => {
   const stale = renderMeter(text, { now: new Date('2026-09-10T09:05:00.000Z') });
   assert.match(stale, /<dt>VEROUDERD<\/dt><dd>6<\/dd>/);
-  assert.doesNotMatch(stale, /<meter |data-meter-countdown/);
+  assert.match(stale, /50%[\s\S]*?laatst gemeten · <time datetime="2026-09-10T09:00:00.000Z"/);
+  assert.match(stale, /Reset volgens laatste meting \(UTC\)/);
+  assert.doesNotMatch(stale, /data-meter-countdown/);
+  assert.match(stale, /<ol class="timeline"><li>ONBEKEND/);
   const raw = JSON.parse(text);
   for (const lane of Object.values(raw.lanes)) lane.windows[0].reset_at = '2026-09-10T09:01:00.000Z';
   const expired = renderMeter(JSON.stringify(raw), { now });
   assert.doesNotMatch(expired, /<meter |data-meter-countdown/);
   assert.match(expired, /<ol class="timeline"><li>ONBEKEND/);
   assert.match(renderMeter(text, { now }), /data-meter-countdown/);
+});
+
+test('stale reset transition keeps only an explicitly historical source value', () => {
+  const raw = JSON.parse(text);
+  raw.lanes.CLAUDE1.windows[0].reset_at = '2026-09-10T09:01:00.000Z';
+  const html = renderMeter(JSON.stringify(raw), { now: new Date('2026-09-10T09:06:00.000Z') });
+  const claude = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(claude, /50%/);
+  assert.match(claude, /laatst gemeten/);
+  assert.match(claude, /Reset volgens laatste meting \(UTC\)[\s\S]*?2026-09-10 09:01:00 UTC/);
+  assert.match(claude, /Reset over<\/dt><dd>ONBEKEND/);
+  assert.doesNotMatch(claude, /data-meter-countdown|data-status="ACTUEEL"/);
 });
 
 test('filters intersect provider and status, retain all lanes and handle empty selection', () => {

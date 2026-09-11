@@ -155,11 +155,30 @@ test('publication and latest failed attempt cannot promote an old successful mea
   lane.last_success_at = '2026-09-10T08:00:00.000Z';
   const stale = parse(raw).lanes[4];
   assert.equal(stale.quality, 'UNKNOWN'); assert.equal(stale.reason, 'STALE');
-  assert.equal(stale.windows[0].remaining_percent, null);
+  assert.equal(stale.windows[0].remaining_percent, 50);
+  assert.equal(stale.windows[0].reset_at, '2026-09-10T10:00:00.000Z');
+  assert.equal(stale.windows[0].countdown_seconds, null);
   lane.last_success_at = '2026-09-10T09:00:00.000Z'; lane.quality = 'ERROR'; lane.reason = 'SOURCE_ERROR';
   const failed = parse(raw).lanes[4];
   assert.equal(failed.quality, 'UNKNOWN'); assert.equal(failed.reason, 'SOURCE_ERROR');
   assert.equal(failed.windows[0].countdown_seconds, null);
+});
+
+test('stale proven observations remain historical while unknown and errors stay closed', () => {
+  const raw = fixture();
+  const stale = parse(raw, { now: new Date('2026-09-10T09:06:00.000Z') }).lanes[0];
+  assert.equal(stale.freshness, 'VEROUDERD');
+  assert.equal(stale.windows[0].remaining_percent, 50);
+  assert.equal(stale.windows[0].reset_at, '2026-09-10T10:00:00.000Z');
+  assert.equal(stale.windows[0].countdown_seconds, null);
+
+  for (const alias of ['CPT1', 'GEMINI1']) {
+    const changed = fixture();
+    if (alias === 'CPT1') Object.assign(changed.lanes[alias], { quality: 'ERROR', reason: 'SOURCE_ERROR' });
+    const lane = parse(changed).lanes[METER_ALIASES.indexOf(alias)];
+    assert.equal(lane.freshness, 'ONBEKEND');
+    assert.ok(lane.windows.every(window => window.remaining_percent === null && window.reset_at === null));
+  }
 });
 
 test('unproven Gemini never yields quota even when input asserts generic PROVEN', () => {

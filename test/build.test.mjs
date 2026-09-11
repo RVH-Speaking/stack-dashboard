@@ -291,7 +291,7 @@ test('parseClientPollOrigin: weigert alles behalve een kale origin (fail-closed)
 });
 
 
-test('METER wire snapshot roundtrips closed schema and strips private or stale input', async () => {
+test('METER wire snapshot roundtrips closed schema, strips private input and retains proven stale observations', async () => {
   const { meterFeedFromText } = await import('../scripts/lib/meter-feed-input.mjs');
   const text = await readFile(join(ROOT, 'test/fixtures/meter-feed/current.json'), 'utf8');
   const now = new Date('2026-09-10T09:01:00.000Z');
@@ -304,9 +304,13 @@ test('METER wire snapshot roundtrips closed schema and strips private or stale i
     assert.ok(!serialized.includes('countdown_seconds'));
   }
   const old = meterSnapshot(text, new Date('2026-09-10T09:06:00.000Z'));
-  for (const lane of Object.values(old.lanes)) {
-    for (const w of lane.windows) { assert.equal(w.remaining_percent, null); assert.equal(w.reset_at, null); }
+  for (const alias of ['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2']) {
+    assert.equal(old.lanes[alias].windows[0].remaining_percent, 50);
+    assert.equal(old.lanes[alias].windows[0].reset_at, '2026-09-10T10:00:00.000Z');
   }
+  assert.equal(old.lanes.GEMINI1.windows[0].remaining_percent, null);
+  assert.equal(old.lanes.GEMINI1.windows[0].reset_at, null);
+  assert.ok(!JSON.stringify(old).includes('countdown_seconds'));
 });
 
 test('standalone METER owns same-origin script and cockpit only links to it', async () => {

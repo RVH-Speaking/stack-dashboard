@@ -79,6 +79,7 @@ test('browser poll uses fixed endpoint, no credentials, no redirects and reages 
   assert.ok(html.includes('data-meter-countdown'));
   current = new Date('2026-09-10T09:06:00.000Z'); poll.tick();
   assert.ok(!html.includes('data-meter-countdown')); assert.ok(html.includes('VEROUDERD'));
+  assert.match(html, /50%[\s\S]*?laatst gemeten/);
 });
 
 test('poll errors, malformed and oversized bodies degrade cached data and hide provider errors', async () => {
@@ -93,6 +94,7 @@ test('poll errors, malformed and oversized bodies degrade cached data and hide p
       } });
     assert.equal(await poll.pollOnce(), true); assert.equal(await poll.pollOnce(), false);
     assert.ok(html.includes('VEROUDERD')); assert.ok(!html.includes('data-meter-countdown'));
+    assert.match(html, /50%[\s\S]*?laatst gemeten/);
     assert.ok(!html.includes('private provider failure'));
     assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   }
