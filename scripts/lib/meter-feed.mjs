@@ -190,6 +190,7 @@ export const METER_FEED_SCHEMA = freeze({
           "enum": [
             "UNKNOWN",
             "CLAUDE_ALL",
+            "FABLE",
             "SONNET",
             "OPUS",
             "HAIKU",
@@ -428,7 +429,7 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
           : alias.startsWith('CPT') ? lane.source_kind === 'CODEX_SUBSCRIPTION'
             : ['GEMINI_API_KEY', 'GEMINI_CODE_ASSIST', 'GEMINI_VERTEX'].includes(lane.source_kind);
         const modelOk = lane.windows.every(w => alias.startsWith('CLAUDE')
-          ? ['CLAUDE_ALL', 'SONNET', 'OPUS', 'HAIKU'].includes(w.model_alias)
+          ? ['CLAUDE_ALL', 'FABLE', 'SONNET', 'OPUS', 'HAIKU'].includes(w.model_alias)
           : w.model_alias === (alias.startsWith('CPT') ? 'CODEX_ALL' : 'GEMINI_ALL'));
         const measured = timestamp(lane.last_success_at); const attempted = timestamp(lane.attempted_at);
         const timeOk = measured !== null && attempted !== null && measured <= attempted && attempted <= nowMs;

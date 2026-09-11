@@ -169,6 +169,62 @@ test('multiple windows keep renewal, credit expiry and reset separate without in
   assert.ok(html.includes('WEEKLY')); assert.ok(html.includes(w.credit_expires_at));
 });
 
+test('FABLE is a closed Claude-only weekly alias and remains historical across three rounds', () => {
+  const at = new Date('2026-09-10T09:06:00.000Z');
+  const raw = fixture();
+  raw.lanes.CLAUDE1.windows.push({
+    model_alias: 'FABLE', window_alias: 'WEEKLY', quota_group: 'LANE_LOCAL',
+    remaining_percent: 37, reset_at: '2026-09-17T09:00:00.000Z',
+    subscription_renewal_at: null, credit_expires_at: null,
+  });
+  const current = parseMeterFeed(raw, { now });
+  const currentFable = current.lanes[0].windows[1];
+  assert.equal(currentFable.model_alias, 'FABLE');
+  assert.equal(currentFable.window_alias, 'WEEKLY');
+  assert.equal(currentFable.quota_group, 'LANE_LOCAL');
+  assert.equal(currentFable.remaining_percent, 37);
+  assert.ok(currentFable.countdown_seconds > 0);
+  assert.match(renderMeter(JSON.stringify(raw), { now }), /FABLE <span>WEEKLY[\s\S]*?37%/);
+
+  let text = JSON.stringify(raw);
+  for (let round = 1; round <= 3; round++) {
+    const wire = meterSnapshot(text, at);
+    const fable = wire.lanes.CLAUDE1.windows[1];
+    assert.equal(wire.lanes.CLAUDE1.quality, 'UNKNOWN', `round ${round}`);
+    assert.equal(wire.lanes.CLAUDE1.reason, 'STALE', `round ${round}`);
+    assert.equal(fable.model_alias, 'FABLE', `round ${round}`);
+    assert.equal(fable.window_alias, 'WEEKLY', `round ${round}`);
+    assert.equal(fable.quota_group, 'LANE_LOCAL', `round ${round}`);
+    assert.equal(fable.remaining_percent, 37, `round ${round}`);
+    assert.equal(fable.reset_at, '2026-09-17T09:00:00.000Z', `round ${round}`);
+    assert.equal('countdown_seconds' in fable, false, `round ${round}`);
+    text = JSON.stringify(wire);
+    const parsed = meterFeedFromText(text, { now: at }).lanes[0].windows[1];
+    assert.equal(parsed.remaining_percent, 37, `parsed round ${round}`);
+    assert.equal(parsed.countdown_seconds, null, `parsed round ${round}`);
+  }
+});
+
+test('FABLE rejects non-Claude products, raw provider labels and arbitrary model text', () => {
+  for (const alias of ['CPT1', 'GEMINI1']) {
+    const raw = fixture(); raw.lanes[alias].windows[0].model_alias = 'FABLE';
+    const parsed = parseMeterFeed(raw, { now });
+    const lane = parsed.lanes[METER_ALIASES.indexOf(alias)];
+    assert.equal(lane.reason, 'BINDING_MISMATCH');
+    assert.equal(lane.windows[0].remaining_percent, null);
+  }
+  for (const unsafe of ['Current week (Fable)', 'private-provider/Fable', 'FABLE_OTHER']) {
+    const raw = fixture(); raw.lanes.CLAUDE1.windows[0].model_alias = unsafe;
+    const text = JSON.stringify(raw); const parsed = meterFeedFromText(text, { now });
+    assert.equal(parsed.available, false);
+    assert.doesNotMatch(JSON.stringify(parsed), /Current week|private-provider|FABLE_OTHER/);
+    assert.doesNotMatch(renderMeter(text, { now }), /Current week|private-provider|FABLE_OTHER/);
+  }
+  const extra = fixture(); extra.lanes.CLAUDE1.windows[0].raw_provider_label = 'Current week (Fable)';
+  assert.equal(parseMeterFeed(extra, { now }).available, false);
+  assert.doesNotMatch(renderMeter(JSON.stringify(extra), { now }), /Current week \(Fable\)/);
+});
+
 test('shared pot conflicts suppress every participant, including mismatched source and age', () => {
   for (const field of ['remaining_percent', 'reset_at', 'subscription_renewal_at', 'credit_expires_at', 'source_kind', 'last_success_at']) {
     const raw = fixture();
