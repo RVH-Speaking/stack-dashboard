@@ -142,3 +142,4 @@ volgorde is die van het toevoegen, niet strikt die van de klok.
 | 2026-08-28 08:21 | WAARNEMER | **De automatische controle ziet de openbare plaat afwijken van de bron.** de openbare pagina was niet op te halen. (controlepunten: pagina-onbereikbaar) | GEBLOKKEERD | Richard of Fable |
 | 2026-09-07 16:37 | WAARNEMER | **De automatische controle ziet de openbare plaat afwijken van de bron.** de openbare pagina was niet op te halen. (controlepunten: pagina-onbereikbaar) | GEBLOKKEERD | Richard of Fable |
 | 2026-09-09 02:23 | WAARNEMER | **De automatische controle ziet de openbare plaat afwijken van de bron.** het openbare logboek was niet op te halen. (controlepunten: spiegel-onbereikbaar) | GEBLOKKEERD | Richard of Fable |
+| 2026-09-11 07:41 | WAARNEMER | **De automatische controle ziet de openbare plaat afwijken van de bron.** de openbare pagina was niet op te halen. (controlepunten: pagina-onbereikbaar) | GEBLOKKEERD | Richard of Fable |
