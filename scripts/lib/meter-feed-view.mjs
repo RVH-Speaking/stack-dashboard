@@ -1,4 +1,5 @@
 import { meterFeedFromText } from './meter-feed-input.mjs';
+import { meterMeasurementIsStale } from './meter-feed.mjs';
 
 const UNKNOWN = 'ONBEKEND';
 const label = value => value === 'UNKNOWN' || value == null ? UNKNOWN : value;
@@ -13,7 +14,8 @@ function errorCategory(lane) {
   if (lane.status === 'VEROUDERD') return 'VEROUDERD';
   if (ordinaryWindows(lane).some(window => window.remaining_percent === 0)) return 'QUOTA OP';
   if (lane.reason === 'NONE') return 'GEEN';
-  if (/BINDING|ACCOUNT|AUTH/.test(lane.reason)) return 'LOGIN / ACCOUNT';
+  if (lane.reason === 'BINDING_UNPROVEN') return 'ACCOUNTBINDING ONBEWEZEN';
+  if (lane.reason === 'BINDING_MISMATCH') return 'ACCOUNTBINDING ONBEKEND';
   if (/QUOTA|EXHAUST/.test(lane.reason)) return 'QUOTA OP';
   if (/SOURCE|PROVIDER|COLLECTOR/.test(lane.reason)) return 'PROVIDER';
   return UNKNOWN;
@@ -21,6 +23,12 @@ function errorCategory(lane) {
 
 function ordinaryWindows(lane) {
   return lane.windows.filter(window => window.model_alias === modelFor(lane.alias));
+}
+
+function unanimousDate(windows, field) {
+  if (!windows.length || windows.some(window => window[field] == null)) return null;
+  const values = new Set(windows.map(window => window[field]));
+  return values.size === 1 ? windows[0][field] : null;
 }
 
 function quotaSummary(lane, windowAlias, title) {
@@ -63,7 +71,8 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
     <details><summary>PROCESSOR-bron &amp; betrouwbaarheid</summary><dl>${detail('Hostalias', label(processor.host_alias))}${detail('Hosttype', label(processor.host_kind))}${detail('Publicatie', time(processor.published_at))}${detail('Versheid', label(processor.freshness))}${detail('Meetmodus', label(processor.measurement_mode))}${detail('Geheugendruk', label(processor.memory_pressure))}${detail('Statusreden', label(processor.status_reason))}</dl></details></section>`;
 
   const lanes = feed.lanes.map(lane => {
-    const boundary = lane.freshness === 'CURRENT' && now - new Date(lane.last_success_at) >= 300000;
+    const boundary = lane.freshness === 'CURRENT'
+      && meterMeasurementIsStale(lane.last_success_at, now.getTime());
     const status = !live ? UNKNOWN : boundary ? 'VEROUDERD' : lane.freshness === 'CURRENT' ? 'ACTUEEL' : lane.freshness;
     return { ...lane, status, windows: lane.windows.map(window => status === 'ACTUEEL' ? window
       : status === 'VEROUDERD' ? { ...window, countdown_seconds: null }
@@ -81,11 +90,11 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
     return lane.status === 'ACTUEEL' && session?.quota_group === 'LANE_LOCAL' && session.remaining_percent != null
       ? [{ alias: lane.alias, value: session.remaining_percent }] : [];
   }).sort((a, b) => b.value - a.value || a.alias.localeCompare(b.alias));
-  const bestLane = eligible.length ? `${eligible[0].alias} · ${eligible[0].value}% beschikbaar` : UNKNOWN;
+  const highestCapacity = eligible.length ? `${eligible[0].alias} · ${eligible[0].value}% beschikbaar` : UNKNOWN;
   const cards = lanes.map(lane => {
     const ordinary = ordinaryWindows(lane);
-    const renewal = ordinary.find(window => window.subscription_renewal_at)?.subscription_renewal_at ?? null;
-    const expiry = ordinary.find(window => window.credit_expires_at)?.credit_expires_at ?? null;
+    const renewal = unanimousDate(ordinary, 'subscription_renewal_at');
+    const expiry = unanimousDate(ordinary, 'credit_expires_at');
     return `<article data-meter-lane="${lane.alias}" data-family="${family(lane.alias)}" data-status="${lane.status}" aria-labelledby="lane-${lane.alias}">
       <header class="lane-head"><div><p class="eyebrow">${family(lane.alias)}</p><h3 id="lane-${lane.alias}">${lane.alias}</h3></div><span class="badge ${lane.status.toLowerCase()}">${lane.status}</span></header>
       <div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Huidige sessie')}${quotaSummary(lane, 'WEEKLY', 'Gewone week')}</div>
@@ -97,7 +106,7 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
     .map(window => ({ ...window, alias: lane.alias })))
     .sort((a, b) => a.reset_at.localeCompare(b.reset_at) || a.alias.localeCompare(b.alias));
   const calendar = resets.map(window => `<li><time datetime="${window.reset_at}">${window.reset_at.replace('T', ' ').replace('.000Z', ' UTC')}</time><strong>${window.alias}</strong><span>${window.window_alias} · <span data-meter-countdown>${duration(window.countdown_seconds)}</span></span></li>`).join('');
-  return `<div id="meter"><section aria-labelledby="overview-heading"><h2 id="overview-heading">In één oogopslag</h2><p class="legend"><strong>Legenda:</strong> 100% = volledig beschikbaar · 0% = op / verbruikt.</p><dl class="metrics">${counts}</dl><dl class="source-times">${detail('Laatste publicatie', time(feed.published_at))}${detail('Nieuwste bronmeting', time(newest))}${detail('Meetleeftijd', age)}${detail('Automatische refresh', refresh)}${detail('Beste volgende lane', bestLane)}${detail('Trend / delta', `${UNKNOWN} · minimaal twee bewezen metingen nodig`)}${detail('Historie / export', '<a href="./meter-feed.json" download>Gesaneerde feed downloaden</a>')}</dl></section>
+  return `<div id="meter"><section aria-labelledby="overview-heading"><h2 id="overview-heading">In één oogopslag</h2><p class="legend"><strong>Legenda:</strong> 100% = volledig beschikbaar · 0% = op / verbruikt.</p><dl class="metrics">${counts}</dl><dl class="source-times">${detail('Laatste publicatie', time(feed.published_at))}${detail('Nieuwste bronmeting', time(newest))}${detail('Meetleeftijd', age)}${detail('Automatische refresh', refresh)}${detail('Hoogste sessiecapaciteit', highestCapacity)}${detail('Trend / delta', `${UNKNOWN} · minimaal twee bewezen metingen nodig`)}${detail('Historie / export', '<a href="./meter-feed.json" download>Gesaneerde feed downloaden</a>')}</dl></section>
     ${processorPanel}<section aria-labelledby="lanes-heading"><div class="section-head"><h2 id="lanes-heading">Je zeven lanes</h2><p>Sessie en gewone week · % beschikbaar</p></div><div class="lane-grid">${cards}</div><p id="meter-filter-empty" hidden>Geen lanes voor deze selectie.</p></section>
-    <div class="lower-grid"><section aria-labelledby="resets-heading"><p class="eyebrow">VOORUITKIJKEN</p><h2 id="resets-heading">Resetkalender</h2><p>Alleen actuele, toekomstige resets · UTC</p><ol class="timeline">${calendar || `<li>${UNKNOWN}</li>`}</ol></section><section aria-labelledby="health-heading"><p class="eyebrow">BETROUWBAARHEID</p><h2 id="health-heading">Metergezondheid</h2><dl>${detail('Feed', feed.available ? 'GELDIG' : UNKNOWN)}${detail('Verbinding', !live || refreshStatus === 'waiting' ? UNKNOWN : fallback ? 'VEROUDERD' : refreshStatus === 'active' ? 'BEREIKBAAR' : UNKNOWN)}${detail('Bronnen actueel', String(lanes.filter(lane => lane.status === 'ACTUEEL').length))}</dl><p>Na vijf minuten blijven bewezen percentages en resetdatums zichtbaar als laatst gemeten. De countdown stopt totdat een nieuwe bronmeting slaagt.</p></section></div></div>`;
+    <div class="lower-grid"><section aria-labelledby="resets-heading"><p class="eyebrow">VOORUITKIJKEN</p><h2 id="resets-heading">Resetkalender</h2><p>Alleen actuele, toekomstige resets · UTC</p><ol class="timeline">${calendar || `<li>${UNKNOWN}</li>`}</ol></section><section aria-labelledby="health-heading"><p class="eyebrow">BETROUWBAARHEID</p><h2 id="health-heading">Metergezondheid</h2><dl>${detail('Feed', feed.available ? 'GELDIG' : UNKNOWN)}${detail('Verbinding', !live || refreshStatus === 'waiting' ? UNKNOWN : fallback ? 'VEROUDERD' : refreshStatus === 'active' ? 'BEREIKBAAR' : UNKNOWN)}${detail('Bronnen actueel', String(lanes.filter(lane => lane.status === 'ACTUEEL').length))}</dl><p>Na twaalf minuten blijven bewezen percentages en resetdatums zichtbaar als laatst gemeten. De countdown stopt totdat een nieuwe bronmeting slaagt.</p></section></div></div>`;
 }

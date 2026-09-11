@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { METER_ALIASES, METER_FEED_SCHEMA, parseMeterFeed } from '../scripts/lib/meter-feed.mjs';
+import { METER_ALIASES, METER_FEED_SCHEMA, METER_STALE_MS, meterMeasurementIsStale,
+  parseMeterFeed } from '../scripts/lib/meter-feed.mjs';
 import { meterFeedFromText } from '../scripts/lib/meter-feed-input.mjs';
 import { renderMeter } from '../scripts/lib/meter-feed-view.mjs';
 import { meterSnapshot } from '../scripts/build.mjs';
@@ -77,6 +78,20 @@ test('freshness is lane-local; publication cannot renew old or future measuremen
   assert.ok(parse(raw, { now: new Date('invalid') }).lanes.every(l => l.freshness === 'ONBEKEND'));
 });
 
+test('lane freshness uses one cadence-aware inclusive twelve-minute boundary', () => {
+  assert.equal(METER_STALE_MS, 720000);
+  assert.equal(meterMeasurementIsStale('2026-09-10T09:00:00.000Z', Date.parse('2026-09-10T09:11:59.999Z')), false);
+  assert.equal(meterMeasurementIsStale('2026-09-10T09:00:00.000Z', Date.parse('2026-09-10T09:12:00.000Z')), true);
+  const raw = fixture();
+  raw.published_at = '2026-09-10T09:05:30.000Z';
+  assert.equal(parse(raw, { now: new Date('2026-09-10T09:05:30.000Z') }).lanes[0].freshness, 'CURRENT');
+  assert.equal(parse(raw, { now: new Date('2026-09-10T09:10:00.000Z') }).lanes[0].freshness, 'CURRENT');
+  const stale = parse(raw, { now: new Date('2026-09-10T09:12:00.000Z') }).lanes[0];
+  assert.equal(stale.freshness, 'VEROUDERD');
+  assert.equal(stale.windows[0].remaining_percent, 50);
+  assert.equal(stale.windows[0].countdown_seconds, null);
+});
+
 test('binding mismatch and shared pools never produce a sum; Gemini products remain separate', () => {
   const raw = fixture(); raw.lanes.CPT1.source_kind = 'CLAUDE_SUBSCRIPTION';
   raw.lanes.CLAUDE1.identity_binding_status = 'MISMATCH';
@@ -98,11 +113,15 @@ test('binding mismatch and shared pools never produce a sum; Gemini products rem
 
 test('countdown requires current binding and strictly valid future reset', () => {
   const raw = fixture(); assert.equal(parse(raw).lanes[0].windows[0]?.countdown_seconds ?? null, 3540);
-  for (const reset of [null, '2026-09-10T08:00:00.000Z', '2026-02-30T10:00:00.000Z', 'tomorrow']) {
+  raw.lanes.CLAUDE1.windows[0].reset_at = '2026-09-10T09:01:00.000Z';
+  const expired = parse(raw).lanes[0].windows[0];
+  assert.equal(expired.remaining_percent, null);
+  assert.equal(expired.countdown_seconds, null);
+  for (const reset of [null, '2026-09-10T08:00:00.000Z', '2026-09-10T09:01:00.000Z', '2026-02-30T10:00:00.000Z', 'tomorrow']) {
     raw.lanes.CLAUDE1.windows[0].reset_at = reset;
     assert.equal(parse(raw).lanes[0].windows[0]?.countdown_seconds ?? null, null);
   }
-  assert.ok(!renderMeter(JSON.stringify(fixture()), { now: new Date('2026-09-10T09:05:00.001Z') }).includes('data-meter-countdown'));
+  assert.ok(!renderMeter(JSON.stringify(fixture()), { now: new Date('2026-09-10T09:12:00.000Z') }).includes('data-meter-countdown'));
 });
 
 test('private fields, free error text, paths, emails and tokens cannot be exported', () => {
@@ -170,7 +189,7 @@ test('multiple windows keep renewal, credit expiry and reset separate without in
 });
 
 test('FABLE is a closed Claude-only weekly alias and remains historical across three rounds', () => {
-  const at = new Date('2026-09-10T09:06:00.000Z');
+  const at = new Date('2026-09-10T09:12:00.000Z');
   const raw = fixture();
   raw.lanes.CLAUDE1.windows.push({
     model_alias: 'FABLE', window_alias: 'WEEKLY', quota_group: 'LANE_LOCAL',
@@ -259,7 +278,7 @@ test('publication and latest failed attempt cannot promote an old successful mea
 
 test('stale proven observations remain historical while unknown and errors stay closed', () => {
   const raw = fixture();
-  const stale = parse(raw, { now: new Date('2026-09-10T09:06:00.000Z') }).lanes[0];
+  const stale = parse(raw, { now: new Date('2026-09-10T09:12:00.000Z') }).lanes[0];
   assert.equal(stale.freshness, 'VEROUDERD');
   assert.equal(stale.windows[0].remaining_percent, 50);
   assert.equal(stale.windows[0].reset_at, '2026-09-10T10:00:00.000Z');

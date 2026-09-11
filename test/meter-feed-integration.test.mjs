@@ -78,7 +78,7 @@ test('browser poll uses fixed endpoint, no credentials, no redirects and reages 
     } });
   assert.equal(calls, 0); assert.equal(await poll.pollOnce(), true);
   assert.ok(html.includes('data-meter-countdown'));
-  current = new Date('2026-09-10T09:06:00.000Z'); poll.tick();
+  current = new Date('2026-09-10T09:12:00.000Z'); poll.tick();
   assert.ok(!html.includes('data-meter-countdown')); assert.ok(html.includes('VEROUDERD'));
   assert.match(html, /50%[\s\S]*?laatst gemeten/);
 });
@@ -179,7 +179,7 @@ test('Pages subpath, empty/private feeds, stale and recovery replace exactly sev
   }
   body = text; assert.equal(await poll.pollOnce(), true);
   assert.ok(html.includes('data-meter-countdown'));
-  clock = new Date('2026-09-10T09:06:00.000Z'); poll.tick();
+  clock = new Date('2026-09-10T09:12:00.000Z'); poll.tick();
   assert.ok(!html.includes('data-meter-countdown'));
   const fresh = JSON.parse(text);
   for (const lane of Object.values(fresh.lanes)) { lane.last_success_at = clock.toISOString(); lane.attempted_at = clock.toISOString(); }
@@ -209,7 +209,7 @@ test('actual browser scheduler ticks during outages and retries with recovery ba
   fail = true; await run(5000); assert.ok(!html.includes('data-meter-countdown'));
   await run(10000); assert.ok([...timers.values()].some(t => t.ms === 20000));
   fail = false; await run(20000); assert.ok(html.includes('data-meter-countdown'));
-  current = new Date('2026-09-10T09:06:00.000Z'); await run(1000);
+  current = new Date('2026-09-10T09:12:00.000Z'); await run(1000);
   assert.ok(!html.includes('data-meter-countdown'));
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   stop(); assert.equal(timers.size, 0);
