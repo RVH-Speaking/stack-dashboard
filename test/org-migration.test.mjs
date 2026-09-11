@@ -1007,3 +1007,26 @@ test('R1-kandidaten — de poort zelf weigert vervuilde invoer in plaats van sti
   assert.equal(b.length, 1);
   assert.equal(b[0].eigenaarsklasse, EIGENAARSKLASSE.ACHTERGEBLEVEN);
 });
+
+
+test('METER requires its exact single ANDER_OBJECT exception; extra bindings remain blocked', () => {
+  const pad = 'scripts/lib/collect.mjs';
+  const tekst = readFileSync(pad, 'utf8');
+  const expectedText = `owner: '${VORIGE_HOSTING_EIGENAARS[0]}',`;
+  const posts = UITZONDERINGEN.filter(u => u.pad === pad && u.tekst === expectedText);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].blijft, 'ANDER_OBJECT');
+  assert.match(posts[0].reden, /stack-control/);
+  assert.equal(tekst.split(expectedText).length - 1, 1);
+  assert.deepEqual(toetsBestand({ pad, tekst }), []);
+  const without = UITZONDERINGEN.filter(u => u !== posts[0]);
+  const missing = toetsBestand({ pad, tekst }, { uitzonderingen: without });
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].code, OVERTREDING.OPERATIONELE_EIGENAAR);
+  const extra = toetsBestand({ pad, tekst: `${tekst}\nconst extra = { ${expectedText} };\n` });
+  assert.equal(extra.length, 1);
+  assert.equal(extra[0].code, OVERTREDING.OPERATIONELE_EIGENAAR);
+  const altered = toetsBestand({ pad, tekst: tekst.replace(expectedText, expectedText.replace('owner:', 'otherOwner:')) });
+  assert.equal(altered.length, 1);
+  assert.equal(altered[0].code, OVERTREDING.OPERATIONELE_EIGENAAR);
+});

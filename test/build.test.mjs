@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { toPublicSnapshot, readTextPolicy, planningFromBouwlijst, parseClientPollOrigin } from '../scripts/build.mjs';
+import { toPublicSnapshot, readTextPolicy, planningFromBouwlijst, parseClientPollOrigin, meterSnapshot, attachMeterPolling } from '../scripts/build.mjs';
 
 /**
  * Een collectorresultaat met velden die nooit gepubliceerd mogen worden (interne notitie,
@@ -288,4 +288,45 @@ test('parseClientPollOrigin: weigert alles behalve een kale origin (fail-closed)
   assert.throws(() => parseClientPollOrigin('http://user:pass@127.0.0.1:8787'), /kale http\(s\)-origin/);
   assert.throws(() => parseClientPollOrigin('ftp://127.0.0.1:8787'), /kale http\(s\)-origin/);
   assert.throws(() => parseClientPollOrigin('niet-een-url'), /geen geldige URL/);
+});
+
+
+test('METER wire snapshot roundtrips closed schema and strips private or stale input', async () => {
+  const { meterFeedFromText } = await import('../scripts/lib/meter-feed-input.mjs');
+  const text = await readFile(join(ROOT, 'test/fixtures/meter-feed/current.json'), 'utf8');
+  const now = new Date('2026-09-10T09:01:00.000Z');
+  for (const input of [text, null, '', '{', JSON.stringify({ ...JSON.parse(text), account_id: 'private-account' })]) {
+    const wire = meterSnapshot(input, now);
+    const serialized = JSON.stringify(wire);
+    assert.equal(meterFeedFromText(serialized, { now }).available, true);
+    assert.equal(Object.keys(wire.lanes).length, 7);
+    assert.ok(!serialized.includes('private-account'));
+    assert.ok(!serialized.includes('countdown_seconds'));
+  }
+  const old = meterSnapshot(text, new Date('2026-09-10T09:06:00.000Z'));
+  for (const lane of Object.values(old.lanes)) {
+    for (const w of lane.windows) { assert.equal(w.remaining_percent, null); assert.equal(w.reset_at, null); }
+  }
+});
+
+test('built cockpit attaches same-origin meter script and CSP while static fallback stays safe', async () => {
+  const { renderCockpit } = await import('../scripts/lib/render-cockpit.mjs');
+  for (const clientPollOrigin of [null, 'https://runtime.invalid']) {
+    const html = attachMeterPolling(renderCockpit({ generatedAt: '2026-09-10T09:01:00.000Z', sources: [] }, { clientPollOrigin }));
+    assert.match(html, /script type="module" src=".\/meter-poll.mjs" data-meter-poll/);
+    assert.match(html, /script-src 'self'/);
+    assert.match(html, /connect-src 'self'/);
+    if (clientPollOrigin) assert.match(html, /connect-src 'self' https:\/\/runtime.invalid/);
+    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+    assert.ok(!html.includes('data-meter-countdown'));
+  }
+});
+
+test('METER wire preserves source error cause across build and browser reparsing', async () => {
+  const { meterFeedFromText } = await import('../scripts/lib/meter-feed-input.mjs');
+  const now = new Date('2026-09-10T09:01:00.000Z');
+  const wire = meterSnapshot('{', now);
+  const reparsed = meterFeedFromText(JSON.stringify(wire), { now });
+  assert.equal(reparsed.lanes[0].reason, 'INVALID_FEED');
+  assert.equal(reparsed.lanes[0].quality, 'UNKNOWN');
 });

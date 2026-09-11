@@ -1,11 +1,17 @@
 import { readdir } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
+export const METER_POLL_FILES = Object.freeze([
+  'meter-poll.mjs', 'meter-feed-input.mjs', 'meter-feed-view.mjs', 'meter-feed.mjs', 'validate.mjs',
+]);
+
 export const PUBLISH_ALLOWLIST = Object.freeze([
   '.nojekyll',
   'code-ticker.html',
   'contentstroom.html',
   'index.html',
+  'meter-feed.json',
+  ...METER_POLL_FILES,
   'producten.html',
   'stack-ticker.html',
   'status.json',
@@ -45,14 +51,14 @@ export function outputDirectory(root, requested = 'public') {
 /**
  * Exact de allowlist, geen submappen, symlinks of extra artefacten. `extra` is uitsluitend bedoeld
  * voor de opt-in --client-poll-origin buildvlag (build.mjs): de standaard-/productie-/CI-aanroep
- * (geen tweede argument) blijft strikt op de zes vaste bestanden — deze optie verruimt niets
+ * (geen tweede argument) blijft strikt op de vaste pagina’s, METER-feed en browsermodules — deze optie verruimt niets
  * stilzwijgend, hij moet expliciet worden meegegeven.
  */
 export async function assertPublishFiles(directory, { extra = [] } = {}) {
   const entries = await readdir(directory, { withFileTypes: true });
   if (entries.some((entry) => !entry.isFile())) throw new Error('publicatiemap bevat geen gewoon bestand');
   const actual = entries.map((entry) => entry.name).sort();
-  const expected = [...PUBLISH_ALLOWLIST, ...extra].sort();
+  const expected = [...new Set([...PUBLISH_ALLOWLIST, ...extra])].sort();
   if (actual.join('\n') !== expected.join('\n')) {
     throw new Error(`publicatiemap wijkt af van allowlist: ${actual.join(', ')}`);
   }

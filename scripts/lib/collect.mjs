@@ -11,6 +11,7 @@
  *    en dat is een `UNVERIFIED`-toestand, geen groene.
  */
 
+import { METER_MAX_BYTES, meterFeedFromText } from './meter-feed-input.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -598,6 +599,31 @@ export async function collectTransactieFeedRaw() {
   } catch {
     return null;
   }
+}
+
+const METER_SOURCE = Object.freeze({
+  owner: 'rvanhooijdonk-png',
+  repo: 'stack-control',
+  ref: 'dashboard-feeds',
+  path: 'CONTROL/FEEDS/meter-feed.json',
+});
+
+/** Fixed dashboard-feeds Contents route; injection is for offline fault tests only. */
+export async function collectMeterFeedRaw({ readContents = async () => {
+  // METER is bound independently of the configurable owner/repository of other feeds.
+  const res = await gh(['api', `repos/${METER_SOURCE.owner}/${METER_SOURCE.repo}/contents/${METER_SOURCE.path}?ref=${METER_SOURCE.ref}`]);
+  if (!res.ok || !res.data) return { text: null, tooLarge: false, size: null };
+  return decodeContentsResponse(res.data);
+} } = {}) {
+  try {
+    const result = await readContents(METER_SOURCE.repo, METER_SOURCE.path, METER_SOURCE.ref);
+    if (!result || result.tooLarge || typeof result.text !== 'string'
+        || (result.size !== null && result.size !== undefined
+          && (!Number.isInteger(result.size) || result.size < 0 || result.size > METER_MAX_BYTES))
+        || Buffer.byteLength(result.text, 'utf8') > METER_MAX_BYTES) return null;
+    if (!meterFeedFromText(result.text).available) return null;
+    return JSON.parse(result.text);
+  } catch { return null; }
 }
 
 /** Zelfde contract als `collectTransactieFeedRaw()`, voor de structuur-only code-ticker-feed. */

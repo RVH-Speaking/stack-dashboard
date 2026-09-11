@@ -4,11 +4,12 @@ import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { PUBLISH_ALLOWLIST, CLIENT_POLL_FILES, assertPublishFiles, outputDirectory } from '../scripts/lib/publish-files.mjs';
+import { PUBLISH_ALLOWLIST, CLIENT_POLL_FILES, METER_POLL_FILES, assertPublishFiles, outputDirectory } from '../scripts/lib/publish-files.mjs';
 
 test('publicatie-allowlist bevat exact de zes pagina’s, status en nojekyll', () => {
   assert.deepEqual(PUBLISH_ALLOWLIST, [
     '.nojekyll', 'code-ticker.html', 'contentstroom.html', 'index.html',
+    'meter-feed.json', ...METER_POLL_FILES,
     'producten.html', 'stack-ticker.html', 'status.json', 'transacties.html',
   ]);
 });
@@ -64,7 +65,7 @@ test('CLIENT_POLL_FILES dekt de VOLLEDIGE importboom vanaf runtime-poll.mjs', as
 test('allowlist accepteert uitsluitend exact de gewone bestanden uit PUBLISH_ALLOWLIST', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dashboard-publish-'));
   for (const file of PUBLISH_ALLOWLIST) await writeFile(join(directory, file), '', 'utf8');
-  assert.deepEqual(await assertPublishFiles(directory), PUBLISH_ALLOWLIST);
+  assert.deepEqual(await assertPublishFiles(directory), [...PUBLISH_ALLOWLIST].sort());
   await writeFile(join(directory, 'onverwacht.txt'), '', 'utf8');
   await assert.rejects(assertPublishFiles(directory), /wijkt af van allowlist/);
 });

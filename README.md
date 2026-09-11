@@ -147,3 +147,59 @@ Het lokale artefact blijft staan als archief; er is geen parallel systeem — di
 
 WS13 stond op 21-07-2026 op "geen dashboard". Richard heeft dat op 23-07-2026 herroepen; dit is de
 uitvoering daarvan. Vastgelegd als DEC in `stack-control`.
+
+METER heeft een afzonderlijk gesloten contract in `data/meter-feed.schema.json`.
+`node scripts/build.mjs --meter-feed <lokaal-bestand>` consumeert uitsluitend dit
+expliciete bestand; ontbrekende of ongeldige input toont altijd de zeven vaste
+aliases CLAUDE1–CLAUDE4, CPT1, CPT2 en GEMINI1 als ONBEKEND. Geen ruwe feed,
+bronpad, accountinformatie of providerfout wordt geëxporteerd.
+
+Elke lane heeft een eigen `last_success_at`; na vijf minuten is de meting
+VEROUDERD. Tijdstempels zijn canonieke UTC ISO-strings met milliseconden.
+`published_at` is alleen publicatieleeftijd. Alleen CURRENT met PROVEN binding,
+passend product en een geldige toekomstige reset krijgt een countdown. De
+collector moet binding onafhankelijk bewijzen: een enum is geen authenticatie.
+Gemini API-key, Code Assist en Vertex zijn afzonderlijke `source_kind`-waarden;
+onbewezen binding blijft ONBEKEND. Percentages worden nooit opgeteld, ook niet
+bij dezelfde gesloten `quota_group` (LANE_LOCAL, SHARED_1–SHARED_7 of UNKNOWN).
+
+Hergebruik onderzocht: bestaande runtime-feed input/view/poll en validator;
+METER gebruikt dezelfde validator en cockpit/sanitizepoort. Een eigen contract
+is nodig omdat runtime vrije tekst en andere identiteiten toestaat. Geen nieuwe
+afhankelijkheden of externe zoekactie: deze order is uitsluitend lokaal.
+
+De standaard Pages-build schrijft één gesloten `meter-feed.json` met alle zeven
+lanes en neemt de volledige browser-importboom op in de publicatie-allowlist.
+De cockpit start `meter-poll.mjs`: same-origin, relatief aan de pagina (ook onder
+`/stack-dashboard/`), zonder credentials of redirects. Polls zijn serieel, starten
+om de vijf seconden en vertragen bij fouten tot maximaal zestig seconden. Een
+afhankelijke tick elke seconde verwijdert verouderde countdowns, ook bij uitval.
+Na een geldige nieuwe respons herstelt de weergave vanzelf. De volledige cockpit
+herlaadt iedere 900 seconden, zodat polls en backoff niet elke tien seconden
+worden afgebroken; overige statische panelen volgen die herlaadcadans. Zonder JavaScript
+blijft de veilige statische momentopname zichtbaar.
+
+Atomisch contract: een producer levert het volledige bestaande v1-feedobject
+als één lokaal bestand via `--meter-feed`; de build leest het één keer en
+reconstrueert uitsluitend de gesloten publieke velden. Ruwe input en afgeleide
+countdowns worden nooit gekopieerd. De bestaande workflow uploadt en deployt de
+volledige gecontroleerde publicatiemap als één Pages-artefact. Geen losse PUTs per
+lane, geen tweede host of scheduler. De browser vervangt alle zeven rijen uit één
+volledige respons. CDN-vertraging kan een oude snapshot opleveren; publicatietijd
+vernieuwt daarom nooit een bronmeting.
+
+De workflow heeft nog geen aangewezen producerbestand: de standaardfeed blijft
+ONBEKEND. Deze lokale integratie voegt geen collector/providercall toe en bewijst
+geen live deploy of verse quotadata. Publicatie/activatie en producerbinding blijven
+aparte gates na CODEX1-review.
+
+`renderMeter` onderscheidt `live` (default true, gebruikt door `meter-poll.mjs`
+bij elke tick tegen de echte klok) van `live: false`, de vorm die
+`render-cockpit.mjs` gebruikt voor de statische build. Een statisch artefact
+wordt één keer geschreven en zonder script opnieuw tegen de klok van de kijker
+geëvalueerd; het toont daarom nooit een CURRENT-label, percentage of relatieve
+countdown, ook niet vlak na de build (F1,
+`AUTOCODING_METER_EXACT_HEAD_REVIEW_CODEX1_V1_RECEIPT.md`). CURRENT wordt in de
+statische route expliciet als MOMENTOPNAME getoond; percentage en countdown
+vallen terug op ONBEKEND. VEROUDERD/ONBEKEND blijven ongewijzigd in beide
+routes, dat zijn al fail-closed claims.

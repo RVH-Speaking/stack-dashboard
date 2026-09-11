@@ -21,10 +21,11 @@ import { renderTransactieTicker, renderCodeTicker } from './lib/render-tickers.m
 import { parseTransactieFeed } from './lib/transactie-feed.mjs';
 import { parseCodeTickerFeed } from './lib/code-ticker-feed.mjs';
 import { buildProductModel, lifecycleEvents } from './lib/product-model.mjs';
-import { PUBLISH_ALLOWLIST, CLIENT_POLL_FILES, assertPublishFiles, outputDirectory } from './lib/publish-files.mjs';
+import { PUBLISH_ALLOWLIST, CLIENT_POLL_FILES, METER_POLL_FILES, assertPublishFiles, outputDirectory } from './lib/publish-files.mjs';
 import { validate } from './lib/validate.mjs';
 import { toPublicPlanning } from './lib/planning.mjs';
 import { vertaalBouwlijst } from './lib/planning-bron.mjs';
+import { meterFeedFromText, METER_MAX_BYTES } from './lib/meter-feed-input.mjs';
 import { loadRuntimeFeed } from './lib/runtime-feed-input.mjs';
 import { kanaalpostUitTekst, toPublicKanaalpost } from './lib/kanaalpost.mjs';
 import { VLOOT_ONBEKEND_MINUTEN, toPublicVlootstand, vlootstand as vlootstandVan } from './lib/doorstroom.mjs';
@@ -32,7 +33,7 @@ import { LANES } from './lib/kijk.mjs';
 import {
   collectPullRequests, collectMergedRecent, collectTracker,
   collectDecisions, collectTracks, collectLogbook, collectCi, collectBouwlijst,
-  collectAfspraken, collectTransactieFeedRaw, collectCodeTickerFeedRaw,
+  collectAfspraken, collectTransactieFeedRaw, collectCodeTickerFeedRaw, collectMeterFeedRaw,
   setPublicRepos, setPublicTracks,
   CATEGORIEEN,
 } from './lib/collect.mjs';
@@ -74,12 +75,6 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const CONTRACT_VERSION = '2.7.0';
 const REFRESH_SECONDS = 900;
-/** Alleen de cockpit ("Nu actief") is de real-time waarheidslaag; producten/ticker/drill-down
- * blijven op REFRESH_SECONDS. Let op: GitHub Pages serveert met cache-control max-age=600 —
- * een 10s clientrefresh is dus noodzakelijk maar niet voldoende voor end-to-end 10s-versheid
- * zolang de statische build zelf niet even vaak met een verse --runtime-feed herdraait; dat is
- * een publicatiepijplijnvraag buiten deze taak, niet een renderergat. */
-const COCKPIT_REFRESH_SECONDS = 10;
 /** Een titel is een naam, geen alinea. Langer = iemand plakt iets waar het niet hoort. */
 const MAX_TITLE = 80;
 /** Een raming is een duur. Alles wat daar niet op lijkt is status- of proza-tekst. */
@@ -117,6 +112,31 @@ const NAV_NAAR_COCKPIT = '<nav class="pagenav"><a href="./">← terug naar de co
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(`--${name}`);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+}
+
+/** One closed wire snapshot for all seven lanes; never serialize raw input or view fields. */
+export function meterSnapshot(text, now = new Date()) {
+  const feed = meterFeedFromText(text, { now });
+  return { version: 2, published_at: feed.published_at,
+    lanes: Object.fromEntries(feed.lanes.map(lane => [lane.alias, {
+      identity_binding_status: lane.identity_binding_status,
+      source_kind: lane.source_kind, last_success_at: lane.last_success_at,
+      quality: lane.quality, reason: lane.reason, limitation: lane.limitation,
+      attempted_at: lane.attempted_at,
+      windows: lane.windows.map(({ countdown_seconds, ...window }) => window),
+    }])) };
+}
+
+/** Extend only the cockpit CSP; preserve the opt-in runtime origin if present. */
+export function attachMeterPolling(html) {
+  return html.replace(/(<meta http-equiv="content-security-policy" content=")([^"]+)(">)/,
+    (_, start, policy, end) => {
+      if (!policy.includes('script-src ')) policy += "; script-src 'self'";
+      policy = policy.includes('connect-src ')
+        ? policy.replace('connect-src ', "connect-src 'self' ")
+        : policy + "; connect-src 'self'";
+      return start + policy + end;
+    }).replace('</head>', '<script type="module" src="./meter-poll.mjs" data-meter-poll></script></head>');
 }
 
 /**
@@ -517,16 +537,28 @@ async function main() {
     now: new Date(snapshot.generatedAt),
   });
 
-  // Risico A (Gemini-review, Route C-ontwerp): met JS-polling actief zou de bestaande 10s
-  // meta-refresh de pollingstate elke 10s wegwissen (volle paginareload). Bij --client-poll-origin
-  // gaat de cockpit daarom op dezelfde 900s-vloer als de overige pagina's; de "Nu actief"-sectie
-  // blijft daarna alleen nog door runtime-poll.mjs ververst, niet meer door de meta-refresh.
-  const cockpitHtml = renderCockpit(snapshot, {
-    products, ticker, runtimeFeed,
-    refreshSeconds: clientPollOrigin ? REFRESH_SECONDS : COCKPIT_REFRESH_SECONDS,
+  // Keep the page alive long enough for serial polls/backoff. METER independently
+  // re-evaluates freshness each second; the remaining static panels refresh at 900s.
+  // Explicit local input or the fixed Contents feed. Never publish raw input.
+  let meterText = null;
+  const meterPath = arg('meter-feed');
+  if (meterPath) {
+    try {
+      const bytes = await readFile(meterPath);
+      if (bytes.length <= METER_MAX_BYTES) meterText = bytes.toString('utf8');
+    } catch { /* Missing input stays unknown; never export a path or error. */ }
+  } else {
+    const raw = await collectMeterFeedRaw();
+    meterText = raw === null ? null : JSON.stringify(raw);
+  }
+  const meterWire = assertPublishable(meterSnapshot(meterText, new Date(snapshot.generatedAt)), { strict }).snapshot;
+  meterText = JSON.stringify(meterWire);
+  const cockpitHtml = attachMeterPolling(renderCockpit(snapshot, {
+    products, ticker, runtimeFeed, meterText,
+    refreshSeconds: REFRESH_SECONDS,
     preview: process.argv.includes('--preview'),
     clientPollOrigin,
-  });
+  }));
   const productsHtml = renderProducts(snapshot, products, { refreshSeconds: REFRESH_SECONDS });
   const tickerHtml = renderTicker(snapshot, ticker, { refreshSeconds: REFRESH_SECONDS });
   const contentstroomHtml = renderHtml(snapshot, {
@@ -549,8 +581,9 @@ async function main() {
   await writeFile(join(outDir, 'code-ticker.html'), codeTickerHtml, 'utf8');
   await writeFile(join(outDir, 'status.json'), `${JSON.stringify(status, null, 2)}\n`, 'utf8');
   await writeFile(join(outDir, '.nojekyll'), '', 'utf8');
-  if (clientPollOrigin) {
-    for (const file of CLIENT_POLL_FILES) {
+  await writeFile(join(outDir, 'meter-feed.json'), `${meterText}\n`, 'utf8');
+  {
+    for (const file of new Set([...METER_POLL_FILES, ...(clientPollOrigin ? CLIENT_POLL_FILES : [])])) {
       let source = await readFile(join(ROOT, 'scripts/lib', file), 'utf8');
       // sanitize.mjs kan in de browser geen deny-terms.json lezen (geen node:fs) — bak daarom
       // exact de lijst die de Node-publicatie hierboven al laadde als letterlijke waarden mee,

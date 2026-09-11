@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "meter-feed.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "published_at",
+    "lanes"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "published_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "lanes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "CLAUDE1",
+        "CLAUDE2",
+        "CLAUDE3",
+        "CLAUDE4",
+        "CPT1",
+        "CPT2",
+        "GEMINI1"
+      ],
+      "properties": {
+        "CLAUDE1": {
+          "$ref": "#/$defs/Lane"
+        },
+        "CLAUDE2": {
+          "$ref": "#/$defs/Lane"
+        },
+        "CLAUDE3": {
+          "$ref": "#/$defs/Lane"
+        },
+        "CLAUDE4": {
+          "$ref": "#/$defs/Lane"
+        },
+        "CPT1": {
+          "$ref": "#/$defs/Lane"
+        },
+        "CPT2": {
+          "$ref": "#/$defs/Lane"
+        },
+        "GEMINI1": {
+          "$ref": "#/$defs/Lane"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity_binding_status",
+        "source_kind",
+        "quality",
+        "reason",
+        "limitation",
+        "last_success_at",
+        "attempted_at",
+        "windows"
+      ],
+      "properties": {
+        "identity_binding_status": {
+          "enum": [
+            "PROVEN",
+            "UNKNOWN",
+            "MISMATCH"
+          ]
+        },
+        "source_kind": {
+          "enum": [
+            "CLAUDE_SUBSCRIPTION",
+            "CODEX_SUBSCRIPTION",
+            "GEMINI_API_KEY",
+            "GEMINI_CODE_ASSIST",
+            "GEMINI_VERTEX",
+            "UNKNOWN"
+          ]
+        },
+        "quality": {
+          "enum": [
+            "VERIFIED",
+            "UNKNOWN",
+            "ERROR"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "NONE",
+            "NO_SOURCE",
+            "BINDING_UNPROVEN",
+            "BINDING_MISMATCH",
+            "SOURCE_ERROR",
+            "STALE",
+            "INVALID_FEED",
+            "SHARED_POT_CONFLICT",
+            "INVALID_TIME"
+          ]
+        },
+        "limitation": {
+          "enum": [
+            "NONE",
+            "SOURCE_LIMITED",
+            "BINDING_UNPROVEN",
+            "UNKNOWN"
+          ]
+        },
+        "last_success_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "attempted_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "windows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Window"
+          }
+        }
+      }
+    },
+    "Window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_alias",
+        "window_alias",
+        "quota_group",
+        "remaining_percent",
+        "reset_at",
+        "subscription_renewal_at",
+        "credit_expires_at"
+      ],
+      "properties": {
+        "model_alias": {
+          "enum": [
+            "UNKNOWN",
+            "CLAUDE_ALL",
+            "SONNET",
+            "OPUS",
+            "HAIKU",
+            "CODEX_ALL",
+            "GEMINI_ALL"
+          ]
+        },
+        "window_alias": {
+          "enum": [
+            "UNKNOWN",
+            "FIVE_HOUR",
+            "DAILY",
+            "WEEKLY",
+            "MONTHLY"
+          ]
+        },
+        "quota_group": {
+          "enum": [
+            "UNKNOWN",
+            "LANE_LOCAL",
+            "SHARED_1",
+            "SHARED_2",
+            "SHARED_3",
+            "SHARED_4",
+            "SHARED_5",
+            "SHARED_6",
+            "SHARED_7"
+          ]
+        },
+        "remaining_percent": {
+          "enum": [
+            null,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100
+          ]
+        },
+        "reset_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "subscription_renewal_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "credit_expires_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        }
+      }
+    }
+  }
+}

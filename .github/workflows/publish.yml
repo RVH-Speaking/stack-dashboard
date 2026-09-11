@@ -173,6 +173,9 @@ jobs:
           # Zonder dit token vallen de org-brede PR-secties terug op SOURCE_UNAVAILABLE.
           # De pagina toont dat zichtbaar; er wordt nooit een oude groene stand hergebruikt.
           GH_TOKEN: ${{ secrets.ORG_PR_READ_TOKEN || github.token }}
+        # Build emits one sanitized meter-feed.json plus its same-origin browser modules.
+        # Missing producer input remains seven UNKNOWN lanes; never synthesize quotas.
+        # Upload/deploy below publish the complete directory as one Pages artifact.
         run: node scripts/build.mjs
 
       # `if: always()` zodat een falende Genereren-stap de cache-opslag niet blokkeert — een
