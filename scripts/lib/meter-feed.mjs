@@ -391,6 +391,10 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
           else if (fallback || nowMs - measured > METER_STALE_MS) reason = 'STALE';
         }
         const current = reason === 'NONE' && lane.quality === 'VERIFIED';
+        // A stale value is still a proven historical observation when the only
+        // failed gate is its age. Keep that observation available to the view,
+        // while countdowns and every genuinely unknown/error state stay closed.
+        const historical = reason === 'STALE' && lane.quality === 'VERIFIED';
         const validTime = measured !== null && measured <= nowMs;
         return { alias, identity_binding_status: reason === 'BINDING_MISMATCH' ? 'MISMATCH'
             : alias === 'GEMINI1' ? 'UNKNOWN' : lane.identity_binding_status,
@@ -400,12 +404,16 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
           last_success_at: validTime ? lane.last_success_at : null,
           attempted_at: attempted !== null && attempted <= nowMs ? lane.attempted_at : null,
           windows: lane.windows.map(w => {
-            const known = current && w.window_alias !== 'UNKNOWN' && w.quota_group !== 'UNKNOWN'
-              && (w.reset_at === null || timestamp(w.reset_at) > nowMs);
+            const identified = w.window_alias !== 'UNKNOWN' && w.quota_group !== 'UNKNOWN';
+            const known = current && identified && (w.reset_at === null || timestamp(w.reset_at) > nowMs);
             const result = { model_alias: w.model_alias, window_alias: w.window_alias, quota_group: w.quota_group,
-              remaining_percent: known ? w.remaining_percent : null };
-            for (const key of dates) result[key] = known && timestamp(w[key]) > nowMs ? w[key] : null;
-            result.countdown_seconds = result.reset_at === null ? null : Math.ceil((timestamp(result.reset_at) - nowMs) / 1000);
+              remaining_percent: known || (historical && identified) ? w.remaining_percent : null };
+            for (const key of dates) result[key] = historical && identified
+              ? w[key]
+              : known && timestamp(w[key]) > nowMs ? w[key] : null;
+            result.countdown_seconds = current && result.reset_at !== null
+              ? Math.ceil((timestamp(result.reset_at) - nowMs) / 1000)
+              : null;
             return result;
           }) };
       }) };
