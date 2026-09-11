@@ -293,7 +293,10 @@
             "HAIKU",
             "CODEX_ALL",
             "CODEX_SPARK",
-            "GEMINI_ALL"
+            "GEMINI_ALL",
+            "GEMINI_PRO",
+            "GEMINI_FLASH",
+            "GEMINI_FLASH_LITE"
           ]
         },
         "window_alias": {

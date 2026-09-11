@@ -197,7 +197,10 @@ export const METER_FEED_SCHEMA = freeze({
             "HAIKU",
             "CODEX_ALL",
             "CODEX_SPARK",
-            "GEMINI_ALL"
+            "GEMINI_ALL",
+            "GEMINI_PRO",
+            "GEMINI_FLASH",
+            "GEMINI_FLASH_LITE"
           ]
         },
         "window_alias": {
@@ -445,7 +448,7 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
         const modelOk = lane.windows.every(w => alias.startsWith('CLAUDE')
           ? ['CLAUDE_ALL', 'FABLE', 'SONNET', 'OPUS', 'HAIKU'].includes(w.model_alias)
           : alias.startsWith('CPT') ? ['CODEX_ALL', 'CODEX_SPARK'].includes(w.model_alias)
-            : w.model_alias === 'GEMINI_ALL');
+            : ['GEMINI_ALL', 'GEMINI_PRO', 'GEMINI_FLASH', 'GEMINI_FLASH_LITE'].includes(w.model_alias));
         const measured = timestamp(lane.last_success_at); const attempted = timestamp(lane.attempted_at);
         const timeOk = measured !== null && attempted !== null && measured <= attempted && attempted <= nowMs;
         // A sanitized publisher roundtrip represents an earlier verified observation as

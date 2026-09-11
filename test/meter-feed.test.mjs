@@ -397,6 +397,18 @@ test('unproven Gemini never yields quota even when input asserts generic PROVEN'
   }
 });
 
+test('closed Gemini public aliases accept UNKNOWN duration but reject future aliases', () => {
+  for (const model_alias of ['GEMINI_PRO', 'GEMINI_FLASH', 'GEMINI_FLASH_LITE']) {
+    const raw = fixture(); Object.assign(raw.lanes.GEMINI1, { source_kind: 'GEMINI_CODE_ASSIST', identity_binding_status: 'PROVEN', quality: 'VERIFIED', reason: 'NONE', limitation: 'NONE' });
+    Object.assign(raw.lanes.GEMINI1.windows[0], { model_alias, window_alias: 'UNKNOWN', quota_group: 'LANE_LOCAL', remaining_percent: 55 });
+    const parsed = parseMeterFeed(raw, { now });
+    assert.equal(parsed.lanes[6].windows[0].model_alias, model_alias);
+    assert.equal(parsed.lanes[6].windows[0].remaining_percent, null);
+  }
+  const raw = fixture(); raw.lanes.GEMINI1.windows[0].model_alias = 'GEMINI_FUTURE';
+  assert.equal(parseMeterFeed(raw, { now }).lanes[6].reason, 'INVALID_FEED');
+});
+
 test('invalid dates, duplicate windows and incorrect model bindings are closed', () => {
   for (const field of ['last_success_at', 'attempted_at']) {
     const raw = fixture(); raw.lanes.CPT1[field] = '2026-02-30T00:00:00.000Z';
