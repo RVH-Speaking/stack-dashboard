@@ -1,6 +1,22 @@
 {
   "version": 2,
   "published_at": "2026-09-10T09:00:00.000Z",
+  "processor": {
+    "host_alias": "LOCAL_HOST",
+    "host_kind": "LOCAL",
+    "observed_at": "2026-09-10T09:00:00.000Z",
+    "published_at": "2026-09-10T09:00:00.000Z",
+    "freshness": "CURRENT",
+    "capacity_cores": 12,
+    "cpu_busy_percent": 42.5,
+    "busy_sample_seconds": 30,
+    "load_1m_per_capacity": 0.45,
+    "queue_pressure": "NORMAL",
+    "overload": "NORMAL",
+    "memory_pressure": "NORMAL",
+    "measurement_mode": "SCHEDULED",
+    "status_reason": "NONE"
+  },
   "lanes": {
     "CLAUDE1": {
       "identity_binding_status": "PROVEN",

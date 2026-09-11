@@ -35,6 +35,11 @@ dd{margin:3px 0;overflow-wrap:anywhere}
 .source-times{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:20px 0 30px}
 .source-times dd{font-size:.87rem}
 .section-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.processor{margin:10px 0 42px;padding:28px;border:1px solid #416075;border-radius:18px;background:radial-gradient(circle at 85% 10%,#18394a 0,transparent 38%),linear-gradient(145deg,#17283a,var(--panel))}
+.processor-grid{display:grid;grid-template-columns:1.1fr repeat(3,1fr);gap:18px;margin-top:22px}
+.processor-grid>dl,.processor-primary{min-width:0;padding:18px;border:1px solid var(--line);border-radius:12px;background:#101a28}
+.processor-primary strong{display:block;font-size:2.7rem;line-height:1.05}
+.processor-primary span,.processor-primary small{display:block;color:var(--muted);font-size:.78rem;margin-top:7px}
 .lane-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 article{background:linear-gradient(145deg,#182638,var(--panel));border:1px solid var(--line);border-radius:16px;padding:24px;min-width:0}
 .lane-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -69,6 +74,7 @@ footer{padding:32px 0 40px;color:var(--muted);font-size:.85rem}
 .skip:focus{top:12px;background:var(--bg);padding:12px;z-index:2}
 @media(max-width:1100px){.lane-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .source-times,.subscription-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.processor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:640px){main,.topnav,footer{width:calc(100% - 32px)}
 .hero{padding-top:32px}
@@ -78,6 +84,7 @@ footer{padding:32px 0 40px;color:var(--muted);font-size:.85rem}
 .metric dt{font-size:.62rem}
 .metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .source-times{grid-template-columns:1fr}
+.processor{padding:20px}.processor-grid{grid-template-columns:1fr}
 .section-head{display:block}
 .filters label{flex:1;min-width:0}
 select{min-width:0;width:100%}

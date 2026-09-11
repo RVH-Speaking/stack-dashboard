@@ -118,7 +118,8 @@ function arg(name, fallback = null) {
 /** One closed wire snapshot for all seven lanes; never serialize raw input or view fields. */
 export function meterSnapshot(text, now = new Date()) {
   const feed = meterFeedFromText(text, { now });
-  return { version: 2, published_at: feed.published_at,
+  const { freshness, ...processor } = feed.processor;
+  return { version: 2, published_at: feed.published_at, processor: { ...processor, freshness },
     lanes: Object.fromEntries(feed.lanes.map(lane => [lane.alias, {
       identity_binding_status: lane.identity_binding_status,
       source_kind: lane.source_kind, last_success_at: lane.last_success_at,

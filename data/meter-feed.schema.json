@@ -19,6 +19,9 @@
       ],
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
     },
+    "processor": {
+      "$ref": "#/$defs/Processor"
+    },
     "lanes": {
       "type": "object",
       "additionalProperties": false,
@@ -57,6 +60,134 @@
     }
   },
   "$defs": {
+    "Processor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host_alias",
+        "host_kind",
+        "observed_at",
+        "published_at",
+        "freshness",
+        "capacity_cores",
+        "cpu_busy_percent",
+        "busy_sample_seconds",
+        "load_1m_per_capacity",
+        "queue_pressure",
+        "overload",
+        "memory_pressure",
+        "measurement_mode",
+        "status_reason"
+      ],
+      "properties": {
+        "host_alias": {
+          "enum": [
+            "LOCAL_HOST",
+            "CLOUD_HOST",
+            "UNKNOWN"
+          ]
+        },
+        "host_kind": {
+          "enum": [
+            "LOCAL",
+            "CLOUD",
+            "UNKNOWN"
+          ]
+        },
+        "observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "freshness": {
+          "enum": [
+            "CURRENT",
+            "VEROUDERD",
+            "UNKNOWN"
+          ]
+        },
+        "capacity_cores": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "cpu_busy_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "busy_sample_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "load_1m_per_capacity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "queue_pressure": {
+          "enum": [
+            "NORMAL",
+            "ELEVATED",
+            "SATURATED",
+            "UNKNOWN"
+          ]
+        },
+        "overload": {
+          "enum": [
+            "NORMAL",
+            "HIGH",
+            "OVERLOADED",
+            "UNKNOWN"
+          ]
+        },
+        "memory_pressure": {
+          "enum": [
+            "NORMAL",
+            "WARN",
+            "CRITICAL",
+            "UNKNOWN"
+          ]
+        },
+        "measurement_mode": {
+          "enum": [
+            "SCHEDULED",
+            "ON_DEMAND",
+            "UNKNOWN"
+          ]
+        },
+        "status_reason": {
+          "enum": [
+            "NONE",
+            "STALE",
+            "UNSUPPORTED",
+            "SOURCE_ERROR",
+            "INVALID_TIME",
+            "INVALID_FEED",
+            "INSUFFICIENT_SAMPLES",
+            "QUEUE_OR_IO_PRESSURE"
+          ]
+        }
+      }
+    },
     "Lane": {
       "type": "object",
       "additionalProperties": false,

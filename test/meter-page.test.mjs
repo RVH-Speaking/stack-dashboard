@@ -18,7 +18,7 @@ test('standalone has accessible mobile shell, navigation, filters and explicit u
     /download="meter-feed.json"/, /href=".\/index.html"/, /ONVOLDOENDE METINGEN/, /<noscript>/,
     /id="health-heading"/, /id="subscriptions-heading"/, /id="resets-heading"/]) assert.match(html, expression);
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
-  assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%/);
+  assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%|42\.5%|LOCAL_HOST/);
   const staleStatic = renderMeterPage(text, { now: new Date('2026-09-10T09:06:00.000Z') });
   assert.doesNotMatch(staleStatic, /data-meter-countdown|value="50"|50%|data-status="VEROUDERD"/);
   assert.equal((staleStatic.match(/data-status="ONBEKEND"/g) ?? []).length, 7);
@@ -62,6 +62,25 @@ test('live overview separates publication from source and exposes all windows wi
   const gemini = html.match(/<article data-meter-lane="GEMINI1"[\s\S]*?<\/article>/)[0];
   assert.match(gemini, /ONBEKEND/);
   assert.doesNotMatch(gemini, /<meter |data-meter-countdown/);
+  assert.match(html, /data-processor-status="CURRENT"/);
+  assert.match(html, /42.5%/);
+  assert.match(html, /LOCAL_HOST/);
+});
+
+test('PROCESSOR stale retains measured capacity but suppresses current overload; UNKNOWN stays empty', () => {
+  let html = renderMeter(text, { now: new Date('2026-09-10T09:20:00.001Z') });
+  let panel = html.match(/<section class="processor"[\s\S]*?<\/section>/)[0];
+  assert.match(panel, /data-processor-status="VEROUDERD"/);
+  assert.match(panel, /42.5%[\s\S]*?laatst gemeten/);
+  assert.match(panel, /Overload<\/dt><dd>ONBEKEND/);
+  assert.doesNotMatch(panel, /OVERLOADED/);
+
+  const raw = JSON.parse(text); delete raw.processor;
+  html = renderMeter(JSON.stringify(raw), { now });
+  panel = html.match(/<section class="processor"[\s\S]*?<\/section>/)[0];
+  assert.match(panel, /data-processor-status="UNKNOWN"/);
+  assert.doesNotMatch(panel, /42.5%|LOCAL_HOST/);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
 });
 
 test('five-minute boundary labels historical capacity and reset while stopping countdown and calendar', () => {

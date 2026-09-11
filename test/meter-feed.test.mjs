@@ -20,6 +20,42 @@ test('closed schema mirrors browser contract and exact seven required aliases', 
   assert.throws(() => { METER_FEED_SCHEMA.additionalProperties = true; });
 });
 
+test('processor is optional, closed and becomes stale after twenty minutes without claiming overload', () => {
+  const current = parse(fixture());
+  assert.deepEqual(current.processor, { ...fixture().processor, freshness: 'CURRENT' });
+  const old = parse(fixture(), { now: new Date('2026-09-10T09:20:00.001Z') }).processor;
+  assert.equal(old.freshness, 'VEROUDERD');
+  assert.equal(old.cpu_busy_percent, 42.5);
+  assert.equal(old.load_1m_per_capacity, 0.45);
+  assert.equal(old.overload, 'UNKNOWN');
+  assert.equal(old.status_reason, 'STALE');
+  const roundtrip = parse({ ...fixture(), processor: old }, { now: new Date('2026-09-10T09:21:00.000Z') }).processor;
+  assert.equal(roundtrip.freshness, 'VEROUDERD');
+  assert.equal(roundtrip.cpu_busy_percent, 42.5);
+  const absent = fixture(); delete absent.processor;
+  assert.equal(parse(absent).processor.freshness, 'UNKNOWN');
+  assert.equal(parse(absent).processor.cpu_busy_percent, null);
+});
+
+test('processor unsupported, invalid or private input stays empty without affecting seven-lane shape', () => {
+  for (const mutate of [
+    raw => { raw.processor.status_reason = 'UNSUPPORTED'; raw.processor.capacity_cores = null; },
+    raw => { raw.processor.host_alias = 'UNKNOWN'; },
+    raw => { raw.processor.observed_at = '2026-09-10T09:01:01.000Z'; },
+  ]) {
+    const raw = fixture(); mutate(raw); const parsed = parse(raw);
+    assert.equal(parsed.lanes.length, 7);
+    assert.equal(parsed.processor.freshness, 'UNKNOWN');
+    assert.equal(parsed.processor.cpu_busy_percent, null);
+  }
+  for (const [key, value] of [['hostname', 'private-host'], ['pid', 123], ['path', '/private/source']]) {
+    const raw = fixture(); raw.processor[key] = value;
+    const rendered = renderMeter(JSON.stringify(raw), { now });
+    assert.ok(!rendered.includes(String(value)));
+    assert.equal((rendered.match(/data-meter-lane=/g) ?? []).length, 7);
+  }
+});
+
 test('empty malformed stale sources always render exactly seven fixed aliases', () => {
   for (const text of [null, '', '{', '{}', JSON.stringify(fixture())]) {
     const html = renderMeter(text, { now: new Date('2026-09-11T09:00:00.000Z') });
