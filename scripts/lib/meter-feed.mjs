@@ -2,6 +2,7 @@
 import { validate } from './validate.mjs';
 export const METER_ALIASES = Object.freeze(['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2', 'GEMINI1']);
 export const METER_STALE_MS = 300_000;
+export const PROCESSOR_STALE_MS = 1_200_000;
 function freeze(value) {
   if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
   return value;
@@ -26,6 +27,9 @@ export const METER_FEED_SCHEMA = freeze({
         "null"
       ],
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "processor": {
+      "$ref": "#/$defs/Processor"
     },
     "lanes": {
       "type": "object",
@@ -65,6 +69,29 @@ export const METER_FEED_SCHEMA = freeze({
     }
   },
   "$defs": {
+    "Processor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host_alias", "host_kind", "observed_at", "published_at", "freshness",
+        "capacity_cores", "cpu_busy_percent", "busy_sample_seconds", "load_1m_per_capacity",
+        "queue_pressure", "overload", "memory_pressure", "measurement_mode", "status_reason"],
+      "properties": {
+        "host_alias": { "enum": ["LOCAL_HOST", "CLOUD_HOST", "UNKNOWN"] },
+        "host_kind": { "enum": ["LOCAL", "CLOUD", "UNKNOWN"] },
+        "observed_at": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$" },
+        "published_at": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$" },
+        "freshness": { "enum": ["CURRENT", "VEROUDERD", "UNKNOWN"] },
+        "capacity_cores": { "type": ["integer", "null"], "minimum": 1 },
+        "cpu_busy_percent": { "type": ["number", "null"], "minimum": 0 },
+        "busy_sample_seconds": { "type": ["integer", "null"], "minimum": 1 },
+        "load_1m_per_capacity": { "type": ["number", "null"], "minimum": 0 },
+        "queue_pressure": { "enum": ["NORMAL", "ELEVATED", "SATURATED", "UNKNOWN"] },
+        "overload": { "enum": ["NORMAL", "HIGH", "OVERLOADED", "UNKNOWN"] },
+        "memory_pressure": { "enum": ["NORMAL", "WARN", "CRITICAL", "UNKNOWN"] },
+        "measurement_mode": { "enum": ["SCHEDULED", "ON_DEMAND", "UNKNOWN"] },
+        "status_reason": { "enum": ["NONE", "STALE", "UNSUPPORTED", "SOURCE_ERROR", "INVALID_TIME", "INVALID_FEED", "INSUFFICIENT_SAMPLES", "QUEUE_OR_IO_PRESSURE"] }
+      }
+    },
     "Lane": {
       "type": "object",
       "additionalProperties": false,
@@ -333,10 +360,34 @@ const unknown = alias => ({ alias, identity_binding_status: 'UNKNOWN', source_ki
   quality: 'UNKNOWN', reason: 'INVALID_FEED', limitation: 'UNKNOWN', freshness: 'ONBEKEND',
   last_success_at: null, attempted_at: null, windows: [] });
 const dates = ['reset_at', 'subscription_renewal_at', 'credit_expires_at'];
+const unknownProcessor = () => ({ host_alias: 'UNKNOWN', host_kind: 'UNKNOWN', observed_at: null,
+  published_at: null, freshness: 'UNKNOWN', capacity_cores: null, cpu_busy_percent: null,
+  busy_sample_seconds: null, load_1m_per_capacity: null, queue_pressure: 'UNKNOWN',
+  overload: 'UNKNOWN', memory_pressure: 'UNKNOWN', measurement_mode: 'UNKNOWN',
+  status_reason: 'INVALID_FEED' });
+
+function parseProcessor(raw, nowMs, fallback) {
+  if (raw === undefined) return unknownProcessor();
+  const observed = timestamp(raw.observed_at); const published = timestamp(raw.published_at);
+  const identityOk = raw.host_alias !== 'UNKNOWN' && raw.host_kind !== 'UNKNOWN';
+  const valuesOk = raw.capacity_cores !== null && raw.cpu_busy_percent !== null
+    && raw.busy_sample_seconds !== null && raw.load_1m_per_capacity !== null
+    && [raw.capacity_cores, raw.cpu_busy_percent, raw.busy_sample_seconds, raw.load_1m_per_capacity].every(Number.isFinite)
+    && raw.capacity_cores <= 4096 && raw.cpu_busy_percent <= 100
+    && raw.busy_sample_seconds <= 300 && raw.load_1m_per_capacity <= 1000;
+  const measurementOk = raw.measurement_mode !== 'UNKNOWN';
+  const inputCurrent = raw.freshness === 'CURRENT' && ['NONE', 'QUEUE_OR_IO_PRESSURE'].includes(raw.status_reason);
+  const inputHistorical = raw.freshness === 'VEROUDERD' && raw.status_reason === 'STALE';
+  if (!identityOk || !valuesOk || !measurementOk || observed === null || published === null
+      || observed > published || published > nowMs || (!inputCurrent && !inputHistorical)) return unknownProcessor();
+  const stale = inputHistorical || fallback || nowMs - observed > PROCESSOR_STALE_MS;
+  return { ...raw, freshness: stale ? 'VEROUDERD' : 'CURRENT',
+    overload: stale ? 'UNKNOWN' : raw.overload, status_reason: stale ? 'STALE' : raw.status_reason };
+}
 
 /** Publication never renews source evidence. B0 has no authenticated Gemini binding proof. */
 export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {}) {
-  const empty = { available: false, published_at: null, lanes: METER_ALIASES.map(unknown) };
+  const empty = { available: false, published_at: null, processor: unknownProcessor(), lanes: METER_ALIASES.map(unknown) };
   try {
     if (new TextEncoder().encode(JSON.stringify(raw)).length > 32768 || validate(METER_FEED_SCHEMA, raw).length) return empty;
     const nowMs = now instanceof Date ? now.getTime() : NaN;
@@ -370,7 +421,7 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
     for (const entries of pots.values()) {
       if (new Set(entries.map(e => e.signature)).size > 1) entries.forEach(e => conflicts.add(e.alias));
     }
-    return { available: true, published_at: raw.published_at,
+    return { available: true, published_at: raw.published_at, processor: parseProcessor(raw.processor, nowMs, fallback),
       lanes: METER_ALIASES.map(alias => {
         const lane = raw.lanes[alias];
         const sourceOk = alias.startsWith('CLAUDE') ? lane.source_kind === 'CLAUDE_SUBSCRIPTION'

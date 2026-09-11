@@ -95,6 +95,9 @@ test('poll errors, malformed and oversized bodies degrade cached data and hide p
     assert.equal(await poll.pollOnce(), true); assert.equal(await poll.pollOnce(), false);
     assert.ok(html.includes('VEROUDERD')); assert.ok(!html.includes('data-meter-countdown'));
     assert.match(html, /50%[\s\S]*?laatst gemeten/);
+    assert.match(html, /data-processor-status="VEROUDERD"/);
+    assert.match(html, /42.5%/);
+    assert.match(html, /Overload<\/dt><dd>ONBEKEND/);
     assert.ok(!html.includes('private provider failure'));
     assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   }
