@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { renderHtml } from '../scripts/lib/render.mjs';
 import { renderCockpit, renderProducts, renderTicker } from '../scripts/lib/render-cockpit.mjs';
 import { renderTransactieTicker, renderCodeTicker } from '../scripts/lib/render-tickers.mjs';
+import { renderMeterPage } from '../scripts/lib/render-meter-page.mjs';
 import { PUBLISH_ALLOWLIST } from '../scripts/lib/publish-files.mjs';
 import { failurePageHtml } from '../scripts/failure-page.mjs';
 
@@ -114,10 +115,10 @@ test('beide pagina\'s zeggen wél wat er dan wel gebeurt', () => {
 // zelfgeschreven scanner is geen HTML5-parser. Het merk blijft staan als eerlijke mededeling aan
 // wie de pagina zélf bekijkt, en wordt hier gelezen als kale tekst — geen tweede parser erbij.
 // De vier SNAPSHOT-routes: de pagina's die op de dashboard-snapshot rusten en dus een bronstand
-// hébben. De twee ticker-pagina's staan óók in de publicatielijst maar renderen een eigen feed
+// hébben. De twee ticker-pagina's en de zelfstandige METER-pagina renderen een eigen feed
 // zonder `sources`; zij krijgen bewust geen merk (bevinding Codex P4: "elke gepubliceerde pagina"
 // was een te brede claim). De test hieronder maakt die beperktere invariant hard, zodat een
-// zevende route niet ongeclassificeerd langs de bewaking kan glippen.
+// nieuwe route niet ongeclassificeerd langs de bewaking kan glippen.
 
 /** Het merk zoals render.mjs het letterlijk schrijft — producent en test zitten aan elkaar vast. */
 const merkVan = (snapshot) => `<meta name="bronstand" content="bewezen=${
@@ -145,22 +146,27 @@ for (const [naam, maak] of alleRoutes) {
 }
 
 test('de publicatielijst valt uiteen in "draagt een bronstand" en "hoort er geen te hebben"', () => {
-  // Zonder deze test is de dekking hierboven een handmatige lijst van vier: wie een zevende pagina
+  // Zonder deze test is de dekking hierboven een handmatige lijst van vier: wie een nieuwe pagina
   // publiceert, krijgt nergens een rode test als die pagina geen merk draagt — en de waarnemer zou
   // haar, zodra hij ooit ook daarheen kijkt, als BRONSTAND_ONLEESBAAR melden. De partitie is
   // daarom expliciet en uitputtend.
   const metBronstand = ['index.html', 'contentstroom.html', 'producten.html', 'stack-ticker.html'];
-  // Deze twee tonen een eigen ticker-feed; de snapshot met haar `sources` komt er niet aan te pas.
+  // Tickers tonen hun eigen feed; METER gebruikt zijn eigen gesloten, gesaneerde METER-feed.
+  // De dashboard-snapshot met haar `sources` komt bij deze drie routes niet aan te pas.
   // Een bronstand op zo'n pagina zou een meting suggereren die er niet is.
-  const zonderBronstand = ['transacties.html', 'code-ticker.html'];
+  const zonderBronstand = ['transacties.html', 'code-ticker.html', 'meter.html'];
 
   const gepubliceerd = PUBLISH_ALLOWLIST.filter((f) => f.endsWith('.html')).sort();
   assert.deepEqual(gepubliceerd, [...metBronstand, ...zonderBronstand].sort(),
     'nieuwe of verdwenen HTML-route: deel haar hierboven in vóór ze publiceert');
 
-  for (const maak of [() => renderTransactieTicker({ available: false }), () => renderCodeTicker({ available: false })]) {
+  for (const maak of [
+    () => renderTransactieTicker({ available: false }),
+    () => renderCodeTicker({ available: false }),
+    () => renderMeterPage(),
+  ]) {
     assert.equal(maak().includes('name="bronstand"'), false,
-      'een ticker-pagina hoort geen bronstand te dragen — zij meet geen bronnen');
+      'een pagina met een eigen feed hoort geen dashboard-bronstand te dragen');
   }
 });
 

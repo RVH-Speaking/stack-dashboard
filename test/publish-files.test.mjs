@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { PUBLISH_ALLOWLIST, CLIENT_POLL_FILES, METER_POLL_FILES, assertPublishFiles, outputDirectory } from '../scripts/lib/publish-files.mjs';
 
-test('publicatie-allowlist bevat exact de zes pagina’s, status en nojekyll', () => {
+test('publicatie-allowlist bevat exact de zeven pagina’s, METER-feed en modules, status en nojekyll', () => {
   assert.deepEqual(PUBLISH_ALLOWLIST, [
     '.nojekyll', 'code-ticker.html', 'contentstroom.html', 'index.html',
-    'meter-feed.json', ...METER_POLL_FILES,
+    'meter-feed.json', 'meter.html', ...METER_POLL_FILES,
     'producten.html', 'stack-ticker.html', 'status.json', 'transacties.html',
   ]);
 });
