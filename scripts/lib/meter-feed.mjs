@@ -425,7 +425,7 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
     for (const [alias, lane] of Object.entries(raw.lanes)) {
       for (const w of lane.windows) {
         if (!w.quota_group.startsWith('SHARED_')) continue;
-        const key = `${w.quota_group}/${w.window_alias}`;
+        const key = `${w.quota_group}/${w.model_alias}/${w.window_alias}`;
         const signature = JSON.stringify([lane.source_kind, lane.last_success_at, lane.quality,
           lane.identity_binding_status, lane.reason, lane.limitation, w.remaining_percent,
           w.resets_remaining, ...dates.map(k => w[k])]);

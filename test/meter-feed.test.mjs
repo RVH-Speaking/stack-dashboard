@@ -281,6 +281,28 @@ test('shared pot conflicts suppress every participant, including mismatched sour
   }
 });
 
+test('shared Codex comparison keys include model so all and Spark windows remain independent', () => {
+  const raw = fixture();
+  const base = { ...raw.lanes.CPT1.windows[0], quota_group: 'SHARED_1', resets_remaining: 3 };
+  const windows = [base,
+    { ...base, model_alias: 'CODEX_ALL', window_alias: 'WEEKLY' },
+    { ...base, model_alias: 'CODEX_SPARK', window_alias: 'FIVE_HOUR', remaining_percent: 96 },
+    { ...base, model_alias: 'CODEX_SPARK', window_alias: 'WEEKLY', remaining_percent: 92 }];
+  raw.lanes.CPT1.windows = structuredClone(windows);
+  raw.lanes.CPT2 = structuredClone(raw.lanes.CPT1);
+  let parsed = parse(raw);
+  assert.equal(parsed.available, true);
+  assert.ok(parsed.lanes.slice(4, 6).every(lane => lane.freshness === 'CURRENT'));
+  raw.lanes.CPT2.windows[3].remaining_percent--;
+  parsed = parse(raw);
+  assert.ok(parsed.lanes.slice(4, 6).every(lane => lane.reason === 'SHARED_POT_CONFLICT'));
+  for (const lane of [raw.lanes.CPT1, raw.lanes.CPT2]) {
+    for (const window of lane.windows) window.quota_group = 'LANE_LOCAL';
+  }
+  parsed = parse(raw);
+  assert.ok(parsed.lanes.slice(4, 6).every(lane => lane.reason === 'NONE'));
+});
+
 test('publication and latest failed attempt cannot promote an old successful measurement', () => {
   const raw = fixture(); const lane = raw.lanes.CPT1;
   raw.published_at = now.toISOString(); lane.attempted_at = now.toISOString();
