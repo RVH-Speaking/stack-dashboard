@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createMeterPoller, startMeterPolling } from '../scripts/lib/meter-poll.mjs';
 import { renderCockpit } from '../scripts/lib/render-cockpit.mjs';
+import { renderMeterPage } from '../scripts/lib/render-meter-page.mjs';
 import { renderMeter } from '../scripts/lib/meter-feed-view.mjs';
 import { CLIENT_POLL_FILES, PUBLISH_ALLOWLIST, METER_POLL_FILES } from '../scripts/lib/publish-files.mjs';
 const text = readFileSync('test/fixtures/meter-feed/current.json', 'utf8');
@@ -56,34 +57,14 @@ console.log(JSON.stringify({ encoding: 'base64', content: Buffer.from(process.en
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('cockpit contains seven fail-closed lanes and no activated meter script', () => {
-  const html = renderCockpit({ generatedAt: instant, sources: [] }, { meterText: text, now: new Date(instant) });
+test('cockpit has only navigation; standalone static page fails closed', () => {
+  const cockpit = renderCockpit({ generatedAt: instant, sources: [] }, { now: new Date(instant) });
+  assert.match(cockpit, /href=".\/meter.html"/);
+  assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
+  const html = renderMeterPage(text, { now: new Date(instant) });
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
-  assert.ok(html.includes('<h3 id="meter-heading">METER</h3>'));
-  assert.ok(!html.includes('src="./meter-poll.mjs"'));
-});
-
-test('F1 regression: a static cockpit build never bakes a live CURRENT label, percentage or relative countdown', () => {
-  // Reproduces AUTOCODING_METER_EXACT_HEAD_REVIEW_CODEX1_V1_RECEIPT.md F1: every lane in the
-  // fixture is CURRENT with a 50% remaining and a 3540s countdown at build time. A static build
-  // artifact is written once and never re-evaluated against the viewer's clock (no script is
-  // attached, see the previous test), so none of those values may be baked into the HTML at all —
-  // not even while the build is still genuinely fresh, since the artifact cannot know when it will
-  // be read.
-  const builtAt = new Date(instant);
-  const html = renderCockpit({ generatedAt: instant, sources: [] }, { meterText: text, now: builtAt });
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
-  assert.ok(!html.includes('data-meter-countdown'));
-  assert.ok(!html.includes('<td>CURRENT</td>'));
-  assert.ok(!/<td>\d+%<\/td>/.test(html));
-  assert.ok(!html.includes('3540s'));
-  // The freshness column still says something explicit instead of silently disappearing.
-  assert.equal((html.match(/<td>MOMENTOPNAME<\/td>/g) ?? []).length, 6);
-  // A live render of the exact same feed (the inert browser poller's own route) is unaffected:
-  // it is genuinely re-evaluated on every tick, so CURRENT/percentage/countdown stay correct there.
-  const liveHtml = renderMeter(text, { now: builtAt });
-  assert.ok(liveHtml.includes('data-meter-countdown'));
-  assert.ok(liveHtml.includes('50%'));
+  assert.doesNotMatch(html, /data-meter-countdown|50%|data-status="ACTUEEL"/);
+  assert.match(renderMeter(text, { now: new Date(instant) }), /data-meter-countdown/);
 });
 
 test('browser poll uses fixed endpoint, no credentials, no redirects and reages between polls', async () => {
@@ -173,7 +154,7 @@ test('Pages subpath, empty/private feeds, stale and recovery replace exactly sev
   fresh.lanes.GEMINI1.identity_binding_status = 'UNKNOWN';
   body = JSON.stringify(fresh); assert.equal(await poll.pollOnce(), true);
   assert.ok(html.includes('data-meter-countdown'));
-  const gemini = html.match(/<tr data-meter-lane="GEMINI1">.*?<\/tr>/)[0];
+  const gemini = html.match(/<article data-meter-lane="GEMINI1"[\s\S]*?<\/article>/)[0];
   assert.ok(gemini.includes('ONBEKEND')); assert.ok(!gemini.includes('data-meter-countdown'));
   assert.ok(!/<td>\d+%<\/td>/.test(gemini));
 });

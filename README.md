@@ -203,3 +203,24 @@ countdown, ook niet vlak na de build (F1,
 statische route expliciet als MOMENTOPNAME getoond; percentage en countdown
 vallen terug op ONBEKEND. VEROUDERD/ONBEKEND blijven ongewijzigd in beide
 routes, dat zijn al fail-closed claims.
+
+### Zelfstandige METER
+
+`meter.html` is de aparte capaciteitspagina; de cockpit verwijst er alleen naar.
+De bestaande Pages-build publiceert de pagina, dezelfde gesaneerde v2
+`meter-feed.json` en de bestaande browsermodules in één artefact. Er is geen
+nieuwe collector of hostingroute. De download bevat uitsluitend de gesloten DTO.
+
+De zeven lane-kaarten zijn filterbaar op provider en status. Filters verbergen
+kaarten visueel; de feed, globale tellers en resetkalender behouden alle lanes.
+Resetkalender, abonnementen/credits en brongezondheid gebruiken uitsluitend
+geverifieerde velden. Zonder historie staat er `ONVOLDOENDE METINGEN`; ontbrekende
+waarden blijven `ONBEKEND`. Gemini blijft onbekend zolang de binding onbewezen is.
+Alle datums tonen UTC; publicatie en bronmeting zijn afzonderlijk zichtbaar.
+
+De statische pagina toont nooit actuele percentages of countdowns. In de browser
+wordt dezelfde parser bij iedere seconde opnieuw toegepast, met een same-origin
+poll iedere vijf seconden, timeout van acht seconden en begrensde retry-backoff.
+Op vijf minuten bronleeftijd of bij polluitval verdwijnen capaciteit en countdowns;
+verse geldige invoer herstelt zonder reload. Zonder JavaScript blijven waarden
+onbekend. Provider- en statusfilters behouden hun selectie tijdens verversen.

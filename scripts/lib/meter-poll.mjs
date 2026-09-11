@@ -12,8 +12,8 @@ export function createMeterPoller({ origin, pageUrl = `${origin}/`, fetchImpl, r
   let text = null;
   let fallback = false;
   let busy = false;
-  const tick = () => render(renderMeter(text, { now: now(), fallback })
-    .replace('Live actualisering niet geactiveerd.', 'Automatisch vernieuwen actief; bronmetingen kunnen verouderd zijn.'));
+  const tick = () => render(renderMeter(text, { now: now(), fallback,
+    refreshStatus: text === null && !fallback ? 'waiting' : 'active' }));
   async function pollOnce() {
     if (busy) return false;
     busy = true;
@@ -51,6 +51,20 @@ export function createMeterPoller({ origin, pageUrl = `${origin}/`, fetchImpl, r
   return Object.freeze({ tick, pollOnce });
 }
 
+/** Filters change visibility only; the complete seven-lane response stays in memory/DOM. */
+export function applyMeterFilters(doc) {
+  const family = doc.getElementById('meter-family')?.value ?? 'Alles';
+  const status = doc.getElementById('meter-status')?.value ?? 'Alles';
+  let visible = 0;
+  for (const card of doc.querySelectorAll?.('[data-meter-lane]') ?? []) {
+    card.hidden = !((family === 'Alles' || card.dataset.family === family)
+      && (status === 'Alles' || card.dataset.status === status));
+    if (!card.hidden) visible++;
+  }
+  const empty = doc.getElementById('meter-filter-empty');
+  if (empty) empty.hidden = visible !== 0;
+}
+
 /** Scheduler is injectable for offline browser tests; retries are serial and bounded. */
 export function startMeterPolling({ document: doc, location, fetchImpl,
   setTimer = setTimeout, clearTimer = clearTimeout, now = () => new Date() }) {
@@ -58,7 +72,20 @@ export function startMeterPolling({ document: doc, location, fetchImpl,
   let pollTimer; let tickTimer; let delay = 5000;
   const poller = createMeterPoller({ origin: location.origin, pageUrl: location.href,
     fetchImpl, now, setTimer, clearTimer,
-    render: html => { const target = doc.getElementById('meter'); if (target) target.outerHTML = html; },
+    render: html => {
+      const target = doc.getElementById('meter');
+      if (!target) return;
+      const opened = [...(target.querySelectorAll?.('details[open]') ?? [])]
+        .map(node => node.closest('[data-meter-lane]').dataset.meterLane);
+      const focusedLane = doc.activeElement?.closest?.('[data-meter-lane]')?.dataset.meterLane;
+      target.outerHTML = html;
+      for (const alias of opened) {
+        const details = doc.querySelector?.(`[data-meter-lane="${alias}"] details`);
+        if (details) details.open = true;
+      }
+      applyMeterFilters(doc);
+      if (focusedLane) doc.querySelector?.(`[data-meter-lane="${focusedLane}"] summary`)?.focus({ preventScroll: true });
+    },
   });
   const tick = () => {
     if (stopped) return;
@@ -70,8 +97,12 @@ export function startMeterPolling({ document: doc, location, fetchImpl,
     delay = ok ? 5000 : Math.min(60000, delay * 2);
     if (!stopped) pollTimer = setTimer(poll, delay);
   };
+  const onFilter = event => {
+    if (['meter-family', 'meter-status'].includes(event.target?.id)) applyMeterFilters(doc);
+  };
+  doc.addEventListener?.('change', onFilter);
   tick(); pollTimer = setTimer(poll, 0);
-  return () => { stopped = true; clearTimer(tickTimer); clearTimer(pollTimer); };
+  return () => { doc.removeEventListener?.('change', onFilter); stopped = true; clearTimer(tickTimer); clearTimer(pollTimer); };
 }
 
 if (typeof document !== 'undefined' && document.querySelector('script[data-meter-poll]')) {

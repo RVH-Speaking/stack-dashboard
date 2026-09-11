@@ -173,10 +173,14 @@ jobs:
           # Zonder dit token vallen de org-brede PR-secties terug op SOURCE_UNAVAILABLE.
           # De pagina toont dat zichtbaar; er wordt nooit een oude groene stand hergebruikt.
           GH_TOKEN: ${{ secrets.ORG_PR_READ_TOKEN || github.token }}
-        # Build emits one sanitized meter-feed.json plus its same-origin browser modules.
+        # Build emits standalone meter.html, one sanitized meter-feed.json and same-origin modules.
         # Missing producer input remains seven UNKNOWN lanes; never synthesize quotas.
         # Upload/deploy below publish the complete directory as one Pages artifact.
-        run: node scripts/build.mjs
+        run: |
+          node scripts/build.mjs
+          test -f public/meter.html
+          test -f public/meter-feed.json
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; const html = readFileSync("public/index.html", "utf8"); if (/data-meter-lane|meter-poll/.test(html) || !html.includes("./meter.html")) process.exit(1);'
 
       # `if: always()` zodat een falende Genereren-stap de cache-opslag niet blokkeert — een
       # geslaagde live lezing ín deze stap heeft het bestand al bijgewerkt vóórdat de stap zelf

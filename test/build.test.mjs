@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { toPublicSnapshot, readTextPolicy, planningFromBouwlijst, parseClientPollOrigin, meterSnapshot, attachMeterPolling } from '../scripts/build.mjs';
+import { toPublicSnapshot, readTextPolicy, planningFromBouwlijst, parseClientPollOrigin, meterSnapshot } from '../scripts/build.mjs';
 
 /**
  * Een collectorresultaat met velden die nooit gepubliceerd mogen worden (interne notitie,
@@ -309,16 +309,18 @@ test('METER wire snapshot roundtrips closed schema and strips private or stale i
   }
 });
 
-test('built cockpit attaches same-origin meter script and CSP while static fallback stays safe', async () => {
+test('standalone METER owns same-origin script and cockpit only links to it', async () => {
+  const { renderMeterPage } = await import('../scripts/lib/render-meter-page.mjs');
   const { renderCockpit } = await import('../scripts/lib/render-cockpit.mjs');
+  const html = renderMeterPage();
+  assert.match(html, /script type="module" src=".\/meter-poll.mjs" data-meter-poll/);
+  assert.match(html, /script-src 'self'/);
+  assert.match(html, /connect-src 'self'/);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   for (const clientPollOrigin of [null, 'https://runtime.invalid']) {
-    const html = attachMeterPolling(renderCockpit({ generatedAt: '2026-09-10T09:01:00.000Z', sources: [] }, { clientPollOrigin }));
-    assert.match(html, /script type="module" src=".\/meter-poll.mjs" data-meter-poll/);
-    assert.match(html, /script-src 'self'/);
-    assert.match(html, /connect-src 'self'/);
-    if (clientPollOrigin) assert.match(html, /connect-src 'self' https:\/\/runtime.invalid/);
-    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
-    assert.ok(!html.includes('data-meter-countdown'));
+    const cockpit = renderCockpit({ generatedAt: '2026-09-10T09:01:00.000Z', sources: [] }, { clientPollOrigin });
+    assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
+    assert.match(cockpit, /href=".\/meter.html"/);
   }
 });
 

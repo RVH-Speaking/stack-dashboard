@@ -11,6 +11,7 @@ export const PUBLISH_ALLOWLIST = Object.freeze([
   'contentstroom.html',
   'index.html',
   'meter-feed.json',
+  'meter.html',
   ...METER_POLL_FILES,
   'producten.html',
   'stack-ticker.html',

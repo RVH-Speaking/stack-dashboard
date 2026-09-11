@@ -15,6 +15,7 @@ import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assertPublishable, loadDenyTerms, getDenyTerms } from './lib/sanitize.mjs';
+import { renderMeterPage } from './lib/render-meter-page.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { renderCockpit, renderProducts, renderTicker } from './lib/render-cockpit.mjs';
 import { renderTransactieTicker, renderCodeTicker } from './lib/render-tickers.mjs';
@@ -125,18 +126,6 @@ export function meterSnapshot(text, now = new Date()) {
       attempted_at: lane.attempted_at,
       windows: lane.windows.map(({ countdown_seconds, ...window }) => window),
     }])) };
-}
-
-/** Extend only the cockpit CSP; preserve the opt-in runtime origin if present. */
-export function attachMeterPolling(html) {
-  return html.replace(/(<meta http-equiv="content-security-policy" content=")([^"]+)(">)/,
-    (_, start, policy, end) => {
-      if (!policy.includes('script-src ')) policy += "; script-src 'self'";
-      policy = policy.includes('connect-src ')
-        ? policy.replace('connect-src ', "connect-src 'self' ")
-        : policy + "; connect-src 'self'";
-      return start + policy + end;
-    }).replace('</head>', '<script type="module" src="./meter-poll.mjs" data-meter-poll></script></head>');
 }
 
 /**
@@ -553,12 +542,12 @@ async function main() {
   }
   const meterWire = assertPublishable(meterSnapshot(meterText, new Date(snapshot.generatedAt)), { strict }).snapshot;
   meterText = JSON.stringify(meterWire);
-  const cockpitHtml = attachMeterPolling(renderCockpit(snapshot, {
-    products, ticker, runtimeFeed, meterText,
+  const cockpitHtml = renderCockpit(snapshot, {
+    products, ticker, runtimeFeed,
     refreshSeconds: REFRESH_SECONDS,
     preview: process.argv.includes('--preview'),
     clientPollOrigin,
-  }));
+  });
   const productsHtml = renderProducts(snapshot, products, { refreshSeconds: REFRESH_SECONDS });
   const tickerHtml = renderTicker(snapshot, ticker, { refreshSeconds: REFRESH_SECONDS });
   const contentstroomHtml = renderHtml(snapshot, {
@@ -574,6 +563,7 @@ async function main() {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, 'index.html'), cockpitHtml, 'utf8');
+  await writeFile(join(outDir, 'meter.html'), renderMeterPage(meterText, { now: new Date(snapshot.generatedAt) }), 'utf8');
   await writeFile(join(outDir, 'producten.html'), productsHtml, 'utf8');
   await writeFile(join(outDir, 'stack-ticker.html'), tickerHtml, 'utf8');
   await writeFile(join(outDir, 'contentstroom.html'), contentstroomHtml, 'utf8');
