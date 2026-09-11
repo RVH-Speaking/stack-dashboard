@@ -431,21 +431,37 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
           ? ['CLAUDE_ALL', 'SONNET', 'OPUS', 'HAIKU'].includes(w.model_alias)
           : w.model_alias === (alias.startsWith('CPT') ? 'CODEX_ALL' : 'GEMINI_ALL'));
         const measured = timestamp(lane.last_success_at); const attempted = timestamp(lane.attempted_at);
+        const timeOk = measured !== null && attempted !== null && measured <= attempted && attempted <= nowMs;
+        // A sanitized publisher roundtrip represents an earlier verified observation as
+        // quality=UNKNOWN + reason=STALE. Accept exactly that closed historical form so another
+        // build cannot erase it. UNKNOWN without explicit STALE proof remains unknown.
+        const priorStaleProof = lane.reason === 'STALE'
+          && ['VERIFIED', 'UNKNOWN'].includes(lane.quality)
+          && sourceOk && lane.identity_binding_status === 'PROVEN'
+          && ['NONE', 'SOURCE_LIMITED'].includes(lane.limitation) && timeOk;
+        const freshProof = lane.reason === 'NONE' && lane.quality === 'VERIFIED'
+          && sourceOk && lane.identity_binding_status === 'PROVEN'
+          && lane.limitation === 'NONE' && timeOk;
         let reason = lane.reason;
         if (conflicts.has(alias)) reason = 'SHARED_POT_CONFLICT';
         else if ((!sourceOk && lane.source_kind !== 'UNKNOWN') || !modelOk || lane.identity_binding_status === 'MISMATCH') reason = 'BINDING_MISMATCH';
         else if (alias === 'GEMINI1') reason = 'BINDING_UNPROVEN';
+        else if (reason === 'STALE' && !priorStaleProof) {
+          if (!sourceOk || lane.identity_binding_status !== 'PROVEN') reason = 'BINDING_UNPROVEN';
+          else if (!timeOk) reason = 'INVALID_TIME';
+          else reason = 'SOURCE_ERROR';
+        }
         else if (reason === 'NONE') {
           if (!sourceOk || lane.identity_binding_status !== 'PROVEN') reason = 'BINDING_UNPROVEN';
           else if (lane.quality !== 'VERIFIED' || lane.limitation !== 'NONE') reason = 'SOURCE_ERROR';
-          else if (measured === null || attempted === null || measured > attempted || attempted > nowMs) reason = 'INVALID_TIME';
+          else if (!timeOk) reason = 'INVALID_TIME';
           else if (fallback || nowMs - measured > METER_STALE_MS) reason = 'STALE';
         }
         const current = reason === 'NONE' && lane.quality === 'VERIFIED';
         // A stale value is still a proven historical observation when the only
         // failed gate is its age. Keep that observation available to the view,
         // while countdowns and every genuinely unknown/error state stay closed.
-        const historical = reason === 'STALE' && lane.quality === 'VERIFIED';
+        const historical = reason === 'STALE' && (priorStaleProof || freshProof);
         const validTime = measured !== null && measured <= nowMs;
         return { alias, identity_binding_status: reason === 'BINDING_MISMATCH' ? 'MISMATCH'
             : alias === 'GEMINI1' ? 'UNKNOWN' : lane.identity_binding_status,

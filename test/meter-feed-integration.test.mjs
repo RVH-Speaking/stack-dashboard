@@ -12,6 +12,7 @@ import { renderMeterPage } from '../scripts/lib/render-meter-page.mjs';
 import { renderMeter } from '../scripts/lib/meter-feed-view.mjs';
 import { CLIENT_POLL_FILES, PUBLISH_ALLOWLIST, METER_POLL_FILES } from '../scripts/lib/publish-files.mjs';
 const text = readFileSync('test/fixtures/meter-feed/current.json', 'utf8');
+const stalePublished = readFileSync('test/fixtures/meter-feed/stale-published.json', 'utf8');
 const instant = '2026-09-10T09:01:00.000Z';
 const response = (body) => new Response(body);
 
@@ -80,6 +81,32 @@ test('browser poll uses fixed endpoint, no credentials, no redirects and reages 
   current = new Date('2026-09-10T09:06:00.000Z'); poll.tick();
   assert.ok(!html.includes('data-meter-countdown')); assert.ok(html.includes('VEROUDERD'));
   assert.match(html, /50%[\s\S]*?laatst gemeten/);
+});
+
+test('browser poll preserves published stale values and processor through failure and recovery', async () => {
+  let html; let body = stalePublished;
+  const poll = createMeterPoller({ origin: 'https://meter.invalid',
+    now: () => new Date('2026-09-10T09:10:00.000Z'), render: value => { html = value; },
+    fetchImpl: async () => response(body) });
+  assert.equal(await poll.pollOnce(), true);
+  assert.match(html, /data-processor-status="CURRENT"/);
+  assert.match(html, /LOCAL_HOST/);
+  assert.equal((html.match(/data-status="VEROUDERD"/g) ?? []).length, 6);
+  assert.match(html, /50%[\s\S]*?laatst gemeten/);
+  assert.doesNotMatch(html, /data-meter-countdown/);
+
+  const failed = JSON.parse(stalePublished);
+  failed.lanes.CLAUDE1.reason = 'SOURCE_ERROR';
+  body = JSON.stringify(failed);
+  assert.equal(await poll.pollOnce(), true);
+  const failedLane = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(failedLane, /ONBEKEND/);
+  assert.doesNotMatch(failedLane, /50%|private|data-meter-countdown/);
+
+  body = stalePublished;
+  assert.equal(await poll.pollOnce(), true);
+  const recoveredLane = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(recoveredLane, /50%[\s\S]*?laatst gemeten/);
 });
 
 test('poll errors, malformed and oversized bodies degrade cached data and hide provider errors', async () => {

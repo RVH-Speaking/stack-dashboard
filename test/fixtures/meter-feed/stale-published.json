@@ -1,0 +1,162 @@
+{
+  "version": 2,
+  "published_at": "2026-09-10T09:06:00.000Z",
+  "processor": {
+    "host_alias": "LOCAL_HOST",
+    "host_kind": "LOCAL",
+    "observed_at": "2026-09-10T09:00:00.000Z",
+    "published_at": "2026-09-10T09:06:00.000Z",
+    "freshness": "CURRENT",
+    "capacity_cores": 12,
+    "cpu_busy_percent": 42.5,
+    "busy_sample_seconds": 30,
+    "load_1m_per_capacity": 0.45,
+    "queue_pressure": "NORMAL",
+    "overload": "NORMAL",
+    "memory_pressure": "NORMAL",
+    "measurement_mode": "SCHEDULED",
+    "status_reason": "NONE"
+  },
+  "lanes": {
+    "CLAUDE1": {
+      "identity_binding_status": "PROVEN",
+      "source_kind": "CLAUDE_SUBSCRIPTION",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "STALE",
+      "limitation": "NONE",
+      "attempted_at": "2026-09-10T09:06:00.000Z",
+      "windows": [
+        {
+          "reset_at": "2026-09-10T10:00:00.000Z",
+          "remaining_percent": 50,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "CLAUDE_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    },
+    "CLAUDE2": {
+      "identity_binding_status": "PROVEN",
+      "source_kind": "CLAUDE_SUBSCRIPTION",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "STALE",
+      "limitation": "NONE",
+      "attempted_at": "2026-09-10T09:06:00.000Z",
+      "windows": [
+        {
+          "reset_at": "2026-09-10T10:00:00.000Z",
+          "remaining_percent": 50,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "CLAUDE_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    },
+    "CLAUDE3": {
+      "identity_binding_status": "PROVEN",
+      "source_kind": "CLAUDE_SUBSCRIPTION",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "STALE",
+      "limitation": "NONE",
+      "attempted_at": "2026-09-10T09:06:00.000Z",
+      "windows": [
+        {
+          "reset_at": "2026-09-10T10:00:00.000Z",
+          "remaining_percent": 50,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "CLAUDE_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    },
+    "CLAUDE4": {
+      "identity_binding_status": "PROVEN",
+      "source_kind": "CLAUDE_SUBSCRIPTION",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "STALE",
+      "limitation": "NONE",
+      "attempted_at": "2026-09-10T09:06:00.000Z",
+      "windows": [
+        {
+          "reset_at": "2026-09-10T10:00:00.000Z",
+          "remaining_percent": 50,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "CLAUDE_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    },
+    "CPT1": {
+      "identity_binding_status": "PROVEN",
+      "source_kind": "CODEX_SUBSCRIPTION",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "STALE",
+      "limitation": "NONE",
+      "attempted_at": "2026-09-10T09:06:00.000Z",
+      "windows": [
+        {
+          "reset_at": "2026-09-10T10:00:00.000Z",
+          "remaining_percent": 50,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "CODEX_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    },
+    "CPT2": {
+      "identity_binding_status": "PROVEN",
+      "source_kind": "CODEX_SUBSCRIPTION",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "STALE",
+      "limitation": "NONE",
+      "attempted_at": "2026-09-10T09:06:00.000Z",
+      "windows": [
+        {
+          "reset_at": "2026-09-10T10:00:00.000Z",
+          "remaining_percent": 50,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "CODEX_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    },
+    "GEMINI1": {
+      "identity_binding_status": "UNKNOWN",
+      "source_kind": "GEMINI_CODE_ASSIST",
+      "last_success_at": "2026-09-10T09:00:00.000Z",
+      "quality": "UNKNOWN",
+      "reason": "BINDING_UNPROVEN",
+      "limitation": "BINDING_UNPROVEN",
+      "attempted_at": "2026-09-10T09:00:00.000Z",
+      "windows": [
+        {
+          "reset_at": null,
+          "remaining_percent": null,
+          "quota_group": "LANE_LOCAL",
+          "model_alias": "GEMINI_ALL",
+          "window_alias": "FIVE_HOUR",
+          "subscription_renewal_at": null,
+          "credit_expires_at": null
+        }
+      ]
+    }
+  }
+}

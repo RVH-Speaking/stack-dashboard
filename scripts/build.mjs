@@ -11,6 +11,7 @@
  */
 
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -127,6 +128,24 @@ export function meterSnapshot(text, now = new Date()) {
       attempted_at: lane.attempted_at,
       windows: lane.windows.map(({ countdown_seconds, ...window }) => window),
     }])) };
+}
+
+/** One graph hash versions the entry and every transitive same-origin METER import. */
+export function meterAssetVersion(sources) {
+  const hash = createHash('sha256');
+  for (const file of METER_POLL_FILES) {
+    const source = sources.get(file);
+    if (typeof source !== 'string') throw new Error('METER_ASSET_SOURCE_MISSING');
+    hash.update(file).update('\0').update(source).update('\0');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+export function versionMeterModuleSource(source, assetVersion) {
+  if (!/^[a-f0-9]{16}$/.test(assetVersion)) throw new Error('METER_ASSET_VERSION_INVALID');
+  const files = new Set(METER_POLL_FILES);
+  return source.replace(/(['"])(\.\/([a-z0-9-]+\.mjs))\1/g, (whole, quote, specifier, file) =>
+    files.has(file) ? `${quote}${specifier}?v=${assetVersion}${quote}` : whole);
 }
 
 /**
@@ -543,6 +562,9 @@ async function main() {
   }
   const meterWire = assertPublishable(meterSnapshot(meterText, new Date(snapshot.generatedAt)), { strict }).snapshot;
   meterText = JSON.stringify(meterWire);
+  const meterModuleSources = new Map(await Promise.all(METER_POLL_FILES.map(async file =>
+    [file, await readFile(join(ROOT, 'scripts/lib', file), 'utf8')])));
+  const meterAssets = meterAssetVersion(meterModuleSources);
   const cockpitHtml = renderCockpit(snapshot, {
     products, ticker, runtimeFeed,
     refreshSeconds: REFRESH_SECONDS,
@@ -564,7 +586,8 @@ async function main() {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, 'index.html'), cockpitHtml, 'utf8');
-  await writeFile(join(outDir, 'meter.html'), renderMeterPage(meterText, { now: new Date(snapshot.generatedAt) }), 'utf8');
+  await writeFile(join(outDir, 'meter.html'), renderMeterPage(meterText,
+    { now: new Date(snapshot.generatedAt), assetVersion: meterAssets }), 'utf8');
   await writeFile(join(outDir, 'producten.html'), productsHtml, 'utf8');
   await writeFile(join(outDir, 'stack-ticker.html'), tickerHtml, 'utf8');
   await writeFile(join(outDir, 'contentstroom.html'), contentstroomHtml, 'utf8');
@@ -575,7 +598,8 @@ async function main() {
   await writeFile(join(outDir, 'meter-feed.json'), `${meterText}\n`, 'utf8');
   {
     for (const file of new Set([...METER_POLL_FILES, ...(clientPollOrigin ? CLIENT_POLL_FILES : [])])) {
-      let source = await readFile(join(ROOT, 'scripts/lib', file), 'utf8');
+      let source = meterModuleSources.get(file) ?? await readFile(join(ROOT, 'scripts/lib', file), 'utf8');
+      if (meterModuleSources.has(file)) source = versionMeterModuleSource(source, meterAssets);
       // sanitize.mjs kan in de browser geen deny-terms.json lezen (geen node:fs) — bak daarom
       // exact de lijst die de Node-publicatie hierboven al laadde als letterlijke waarden mee,
       // zodat client-side sanitize dezelfde deny-termen redigeert als de statische build.

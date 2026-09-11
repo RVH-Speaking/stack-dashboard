@@ -136,8 +136,10 @@ test('offline build publishes standalone endpoint through existing allowlist and
     for (const name of ['scripts', 'data', 'contracts', 'package.json']) cpSync(name, join(root, name), { recursive: true });
     mkdirSync(join(root, 'offline'));
     writeFileSync(join(root, 'offline/gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-    writeFileSync(join(root, 'fixture.json'), readFileSync('test/fixtures/raw-snapshot.json'));
-    writeFileSync(join(root, 'meter.json'), text);
+    const buildFixture = JSON.parse(readFileSync('test/fixtures/raw-snapshot.json'));
+    buildFixture.generatedAt = '2026-09-10T09:10:00.000Z';
+    writeFileSync(join(root, 'fixture.json'), JSON.stringify(buildFixture));
+    writeFileSync(join(root, 'meter.json'), readFileSync('test/fixtures/meter-feed/stale-published.json'));
     const output = execFileSync(process.execPath, ['scripts/build.mjs', '--fixture', 'fixture.json', '--meter-feed', 'meter.json'], {
       cwd: root, encoding: 'utf8', env: { PATH: join(root, 'offline') }, timeout: 30000,
     });
@@ -148,7 +150,39 @@ test('offline build publishes standalone endpoint through existing allowlist and
     assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
     assert.match(cockpit, /href=".\/meter.html"/);
     assert.equal((page.match(/data-meter-lane=/g) ?? []).length, 7);
-    assert.match(page, /src=".\/meter-poll.mjs"/);
+    const assetVersion = page.match(/src="\.\/meter-poll\.mjs\?v=([a-f0-9]{16})"/)?.[1];
+    assert.ok(assetVersion);
+    assert.match(page, /script-src 'self'/);
+    assert.doesNotMatch(page, /https?:\/\//);
+    for (const name of ['meter-poll.mjs', 'meter-feed-input.mjs', 'meter-feed-view.mjs', 'meter-feed.mjs']) {
+      const module = readFileSync(join(root, 'public', name), 'utf8');
+      for (const match of module.matchAll(/from ['"](\.\/[^'"]+\.mjs\?v=([a-f0-9]{16}))['"]/g)) {
+        assert.equal(match[2], assetVersion, `${name}: ${match[1]}`);
+      }
+      assert.doesNotMatch(module, /from ['"]\.\/[^'"]+\.mjs['"]/, `${name} has an unversioned import`);
+      assert.doesNotMatch(module, /from ['"]https?:\/\//);
+    }
+    assert.match(readFileSync(join(root, 'public/meter-poll.mjs'), 'utf8'),
+      new RegExp(`meter-feed-input\\.mjs\\?v=${assetVersion}`));
+    assert.match(readFileSync(join(root, 'public/meter-poll.mjs'), 'utf8'),
+      new RegExp(`meter-feed-view\\.mjs\\?v=${assetVersion}`));
+    assert.match(readFileSync(join(root, 'public/meter-feed-input.mjs'), 'utf8'),
+      new RegExp(`meter-feed\\.mjs\\?v=${assetVersion}`));
+    assert.equal((readFileSync(join(root, 'public/meter-poll.mjs'), 'utf8').match(/meter-feed\.json/g) ?? []).length, 1);
+    const publicFeedText = readFileSync(join(root, 'public/meter-feed.json'), 'utf8');
+    const publicFeed = JSON.parse(publicFeedText);
+    for (const alias of ['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2']) {
+      assert.equal(publicFeed.lanes[alias].quality, 'UNKNOWN');
+      assert.equal(publicFeed.lanes[alias].reason, 'STALE');
+      assert.equal(publicFeed.lanes[alias].windows[0].remaining_percent, 50);
+    }
+    assert.equal(publicFeed.processor.host_alias, 'LOCAL_HOST');
+    const live = renderMeter(publicFeedText, { now: new Date(buildFixture.generatedAt), refreshStatus: 'active' });
+    assert.match(live, /data-processor-status="VEROUDERD"/);
+    assert.match(live, /LOCAL_HOST/);
+    assert.match(live, /42\.5%/);
+    assert.match(live, /50%[\s\S]*?laatst gemeten/);
+    assert.doesNotMatch(live, /data-meter-countdown/);
     assert.doesNotMatch(page, /data-meter-countdown|50%/);
     assert.ok(PUBLISH_ALLOWLIST.includes('meter.html'));
     const workflow = readFileSync('.github/workflows/publish.yml', 'utf8');

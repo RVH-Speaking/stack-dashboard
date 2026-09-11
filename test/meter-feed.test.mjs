@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { METER_ALIASES, METER_FEED_SCHEMA, parseMeterFeed } from '../scripts/lib/meter-feed.mjs';
 import { meterFeedFromText } from '../scripts/lib/meter-feed-input.mjs';
 import { renderMeter } from '../scripts/lib/meter-feed-view.mjs';
+import { meterSnapshot } from '../scripts/build.mjs';
 import { auditSchema, validate } from '../scripts/lib/validate.mjs';
 const fixture = () => JSON.parse(readFileSync(new URL('./fixtures/meter-feed/current.json', import.meta.url)));
 const now = new Date('2026-09-10T09:01:00.000Z');
@@ -214,6 +215,57 @@ test('stale proven observations remain historical while unknown and errors stay 
     const lane = parse(changed).lanes[METER_ALIASES.indexOf(alias)];
     assert.equal(lane.freshness, 'ONBEKEND');
     assert.ok(lane.windows.every(window => window.remaining_percent === null && window.reset_at === null));
+  }
+});
+
+test('published stale UNKNOWN-quality observations survive three build/parser rounds with processor', () => {
+  const at = new Date('2026-09-10T09:10:00.000Z');
+  let text = readFileSync(new URL('./fixtures/meter-feed/stale-published.json', import.meta.url), 'utf8');
+  for (let round = 1; round <= 3; round++) {
+    const parsed = meterFeedFromText(text, { now: at });
+    assert.equal(parsed.available, true, `round ${round}`);
+    assert.equal(parsed.processor.host_alias, 'LOCAL_HOST', `round ${round}`);
+    assert.equal(parsed.processor.cpu_busy_percent, 42.5, `round ${round}`);
+    for (const lane of parsed.lanes.slice(0, 6)) {
+      assert.equal(lane.identity_binding_status, 'PROVEN', `${lane.alias} round ${round}`);
+      assert.equal(lane.quality, 'UNKNOWN', `${lane.alias} round ${round}`);
+      assert.equal(lane.reason, 'STALE', `${lane.alias} round ${round}`);
+      assert.equal(lane.freshness, 'VEROUDERD', `${lane.alias} round ${round}`);
+      assert.equal(lane.windows[0].remaining_percent, 50, `${lane.alias} round ${round}`);
+      assert.equal(lane.windows[0].reset_at, '2026-09-10T10:00:00.000Z', `${lane.alias} round ${round}`);
+      assert.equal(lane.windows[0].countdown_seconds, null, `${lane.alias} round ${round}`);
+    }
+    assert.equal(parsed.lanes[6].windows[0].remaining_percent, null);
+    const html = renderMeter(text, { now: at, refreshStatus: 'active' });
+    assert.match(html, /data-processor-status="CURRENT"/);
+    assert.equal((html.match(/50%/g) ?? []).length, 12);
+    assert.equal((html.match(/laatst gemeten/g) ?? []).length >= 6, true);
+    assert.doesNotMatch(html, /data-meter-countdown/);
+    text = JSON.stringify(meterSnapshot(text, at));
+  }
+});
+
+test('stale roundtrip proof rejects source errors, binding failures and malformed observations', () => {
+  const at = new Date('2026-09-10T09:10:00.000Z');
+  const base = JSON.parse(readFileSync(new URL('./fixtures/meter-feed/stale-published.json', import.meta.url)));
+  for (const mutate of [
+    lane => { lane.reason = 'SOURCE_ERROR'; },
+    lane => { lane.identity_binding_status = 'MISMATCH'; },
+    lane => { lane.identity_binding_status = 'UNKNOWN'; },
+    lane => { lane.source_kind = 'UNKNOWN'; },
+    lane => { lane.limitation = 'UNKNOWN'; },
+    lane => { lane.attempted_at = null; },
+    lane => { lane.last_success_at = '2026-09-10T09:07:00.000Z'; },
+  ]) {
+    const raw = structuredClone(base); mutate(raw.lanes.CLAUDE1);
+    const lane = parseMeterFeed(raw, { now: at }).lanes[0];
+    assert.equal(lane.windows[0].remaining_percent, null);
+    assert.equal(lane.windows[0].reset_at, null);
+    assert.equal(lane.freshness, 'ONBEKEND');
+  }
+  for (const value of [-1, 101, 0.5, '50']) {
+    const raw = structuredClone(base); raw.lanes.CLAUDE1.windows[0].remaining_percent = value;
+    assert.equal(parseMeterFeed(raw, { now: at }).available, false);
   }
 });
 
