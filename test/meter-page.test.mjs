@@ -21,6 +21,22 @@ test('standalone has accessible mobile shell, navigation, filters and explicit u
   assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%/);
 });
 
+test('mobile layout permits shrinking without clipping navigation, filters or metrics', () => {
+  const html = renderMeterPage(text, { now });
+  const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const mobile = css.split('@media(max-width:640px){')[1];
+  const rule = selector => mobile.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\{([^}]+)\\}`))[1];
+  assert.match(rule('.topnav'), /flex-wrap:wrap/);
+  assert.match(rule('.topnav>*'), /min-width:0/);
+  assert.match(rule('.topnav>*'), /overflow-wrap:anywhere/);
+  assert.match(rule('.filters label'), /min-width:0/);
+  assert.match(rule('select'), /min-width:0;width:100%/);
+  assert.match(rule('.metrics'), /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(rule('.metric'), /min-width:0/);
+  assert.match(rule('.metric'), /overflow-wrap:anywhere/);
+  assert.doesNotMatch(css, /overflow(?:-x)?\s*:\s*(?:hidden|clip)/);
+});
+
 test('live overview separates publication from source and exposes all windows without totals', () => {
   const raw = JSON.parse(text);
   raw.published_at = '2026-09-10T09:00:30.000Z';

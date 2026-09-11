@@ -73,15 +73,16 @@ footer{padding:32px 0 40px;color:var(--muted);font-size:.85rem}
 @media(max-width:640px){main,.topnav,footer{width:calc(100% - 32px)}
 .hero{padding-top:32px}
 .lane-grid,.lower-grid,.subscription-grid{grid-template-columns:1fr}
-.metric{padding:14px 10px}
+.metric{min-width:0;padding:14px 10px;overflow-wrap:anywhere}
 .metric dd{font-size:2rem}
 .metric dt{font-size:.62rem}
-.metrics{gap:8px}
+.metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .source-times{grid-template-columns:1fr}
 .section-head{display:block}
-.filters label{flex:1}
+.filters label{flex:1;min-width:0}
 select{min-width:0;width:100%}
-.topnav{font-size:.8rem}
+.topnav{font-size:.8rem;flex-wrap:wrap}
+.topnav>*{min-width:0;overflow-wrap:anywhere}
 article{padding:20px}
 .lower-grid>section{padding:22px}
 }
