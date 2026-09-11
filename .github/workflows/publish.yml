@@ -1,4 +1,5 @@
 name: publish
+run-name: publish METER ${{ inputs.meter_delivery_key || github.event_name }}
 
 # Drie triggers. Push naar main en workflow_dispatch heb je zelf in de hand; de schedule is de
 # klok voor een systeem dat niet continu pusht (anders is de plaat zo oud als de laatste push,
@@ -18,6 +19,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      meter_delivery_key:
+        description: Non-secret METER delivery correlation key
+        required: false
+        type: string
 
 # Standaard niets. Elke job krijgt hieronder precies wat hij nodig heeft.
 permissions: {}
