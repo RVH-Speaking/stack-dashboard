@@ -166,7 +166,7 @@ test('multiple windows keep renewal, credit expiry and reset separate without in
   assert.equal(lane.windows[1].subscription_renewal_at, w.subscription_renewal_at);
   assert.equal(lane.windows[1].credit_expires_at, w.credit_expires_at);
   const html = renderMeter(JSON.stringify(raw), { now });
-  assert.ok(html.includes('WEEKLY')); assert.ok(html.includes(w.credit_expires_at));
+  assert.ok(html.includes('Gewone week')); assert.ok(html.includes(w.credit_expires_at));
 });
 
 test('FABLE is a closed Claude-only weekly alias and remains historical across three rounds', () => {
@@ -184,7 +184,7 @@ test('FABLE is a closed Claude-only weekly alias and remains historical across t
   assert.equal(currentFable.quota_group, 'LANE_LOCAL');
   assert.equal(currentFable.remaining_percent, 37);
   assert.ok(currentFable.countdown_seconds > 0);
-  assert.match(renderMeter(JSON.stringify(raw), { now }), /FABLE <span>WEEKLY[\s\S]*?37%/);
+  assert.doesNotMatch(renderMeter(JSON.stringify(raw), { now }), /FABLE|37%/);
 
   let text = JSON.stringify(raw);
   for (let round = 1; round <= 3; round++) {
