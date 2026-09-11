@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { METER_ALIASES, METER_FEED_SCHEMA, parseMeterFeed } from '../scripts/lib/meter-feed.mjs';
 import { meterFeedFromText } from '../scripts/lib/meter-feed-input.mjs';
 import { renderMeter } from '../scripts/lib/meter-feed-view.mjs';
+import { meterSnapshot } from '../scripts/build.mjs';
 import { auditSchema, validate } from '../scripts/lib/validate.mjs';
 const fixture = () => JSON.parse(readFileSync(new URL('./fixtures/meter-feed/current.json', import.meta.url)));
 const now = new Date('2026-09-10T09:01:00.000Z');
@@ -168,6 +169,62 @@ test('multiple windows keep renewal, credit expiry and reset separate without in
   assert.ok(html.includes('WEEKLY')); assert.ok(html.includes(w.credit_expires_at));
 });
 
+test('FABLE is a closed Claude-only weekly alias and remains historical across three rounds', () => {
+  const at = new Date('2026-09-10T09:06:00.000Z');
+  const raw = fixture();
+  raw.lanes.CLAUDE1.windows.push({
+    model_alias: 'FABLE', window_alias: 'WEEKLY', quota_group: 'LANE_LOCAL',
+    remaining_percent: 37, reset_at: '2026-09-17T09:00:00.000Z',
+    subscription_renewal_at: null, credit_expires_at: null,
+  });
+  const current = parseMeterFeed(raw, { now });
+  const currentFable = current.lanes[0].windows[1];
+  assert.equal(currentFable.model_alias, 'FABLE');
+  assert.equal(currentFable.window_alias, 'WEEKLY');
+  assert.equal(currentFable.quota_group, 'LANE_LOCAL');
+  assert.equal(currentFable.remaining_percent, 37);
+  assert.ok(currentFable.countdown_seconds > 0);
+  assert.match(renderMeter(JSON.stringify(raw), { now }), /FABLE <span>WEEKLY[\s\S]*?37%/);
+
+  let text = JSON.stringify(raw);
+  for (let round = 1; round <= 3; round++) {
+    const wire = meterSnapshot(text, at);
+    const fable = wire.lanes.CLAUDE1.windows[1];
+    assert.equal(wire.lanes.CLAUDE1.quality, 'UNKNOWN', `round ${round}`);
+    assert.equal(wire.lanes.CLAUDE1.reason, 'STALE', `round ${round}`);
+    assert.equal(fable.model_alias, 'FABLE', `round ${round}`);
+    assert.equal(fable.window_alias, 'WEEKLY', `round ${round}`);
+    assert.equal(fable.quota_group, 'LANE_LOCAL', `round ${round}`);
+    assert.equal(fable.remaining_percent, 37, `round ${round}`);
+    assert.equal(fable.reset_at, '2026-09-17T09:00:00.000Z', `round ${round}`);
+    assert.equal('countdown_seconds' in fable, false, `round ${round}`);
+    text = JSON.stringify(wire);
+    const parsed = meterFeedFromText(text, { now: at }).lanes[0].windows[1];
+    assert.equal(parsed.remaining_percent, 37, `parsed round ${round}`);
+    assert.equal(parsed.countdown_seconds, null, `parsed round ${round}`);
+  }
+});
+
+test('FABLE rejects non-Claude products, raw provider labels and arbitrary model text', () => {
+  for (const alias of ['CPT1', 'GEMINI1']) {
+    const raw = fixture(); raw.lanes[alias].windows[0].model_alias = 'FABLE';
+    const parsed = parseMeterFeed(raw, { now });
+    const lane = parsed.lanes[METER_ALIASES.indexOf(alias)];
+    assert.equal(lane.reason, 'BINDING_MISMATCH');
+    assert.equal(lane.windows[0].remaining_percent, null);
+  }
+  for (const unsafe of ['Current week (Fable)', 'private-provider/Fable', 'FABLE_OTHER']) {
+    const raw = fixture(); raw.lanes.CLAUDE1.windows[0].model_alias = unsafe;
+    const text = JSON.stringify(raw); const parsed = meterFeedFromText(text, { now });
+    assert.equal(parsed.available, false);
+    assert.doesNotMatch(JSON.stringify(parsed), /Current week|private-provider|FABLE_OTHER/);
+    assert.doesNotMatch(renderMeter(text, { now }), /Current week|private-provider|FABLE_OTHER/);
+  }
+  const extra = fixture(); extra.lanes.CLAUDE1.windows[0].raw_provider_label = 'Current week (Fable)';
+  assert.equal(parseMeterFeed(extra, { now }).available, false);
+  assert.doesNotMatch(renderMeter(JSON.stringify(extra), { now }), /Current week \(Fable\)/);
+});
+
 test('shared pot conflicts suppress every participant, including mismatched source and age', () => {
   for (const field of ['remaining_percent', 'reset_at', 'subscription_renewal_at', 'credit_expires_at', 'source_kind', 'last_success_at']) {
     const raw = fixture();
@@ -214,6 +271,57 @@ test('stale proven observations remain historical while unknown and errors stay 
     const lane = parse(changed).lanes[METER_ALIASES.indexOf(alias)];
     assert.equal(lane.freshness, 'ONBEKEND');
     assert.ok(lane.windows.every(window => window.remaining_percent === null && window.reset_at === null));
+  }
+});
+
+test('published stale UNKNOWN-quality observations survive three build/parser rounds with processor', () => {
+  const at = new Date('2026-09-10T09:10:00.000Z');
+  let text = readFileSync(new URL('./fixtures/meter-feed/stale-published.json', import.meta.url), 'utf8');
+  for (let round = 1; round <= 3; round++) {
+    const parsed = meterFeedFromText(text, { now: at });
+    assert.equal(parsed.available, true, `round ${round}`);
+    assert.equal(parsed.processor.host_alias, 'LOCAL_HOST', `round ${round}`);
+    assert.equal(parsed.processor.cpu_busy_percent, 42.5, `round ${round}`);
+    for (const lane of parsed.lanes.slice(0, 6)) {
+      assert.equal(lane.identity_binding_status, 'PROVEN', `${lane.alias} round ${round}`);
+      assert.equal(lane.quality, 'UNKNOWN', `${lane.alias} round ${round}`);
+      assert.equal(lane.reason, 'STALE', `${lane.alias} round ${round}`);
+      assert.equal(lane.freshness, 'VEROUDERD', `${lane.alias} round ${round}`);
+      assert.equal(lane.windows[0].remaining_percent, 50, `${lane.alias} round ${round}`);
+      assert.equal(lane.windows[0].reset_at, '2026-09-10T10:00:00.000Z', `${lane.alias} round ${round}`);
+      assert.equal(lane.windows[0].countdown_seconds, null, `${lane.alias} round ${round}`);
+    }
+    assert.equal(parsed.lanes[6].windows[0].remaining_percent, null);
+    const html = renderMeter(text, { now: at, refreshStatus: 'active' });
+    assert.match(html, /data-processor-status="CURRENT"/);
+    assert.equal((html.match(/50%/g) ?? []).length, 12);
+    assert.equal((html.match(/laatst gemeten/g) ?? []).length >= 6, true);
+    assert.doesNotMatch(html, /data-meter-countdown/);
+    text = JSON.stringify(meterSnapshot(text, at));
+  }
+});
+
+test('stale roundtrip proof rejects source errors, binding failures and malformed observations', () => {
+  const at = new Date('2026-09-10T09:10:00.000Z');
+  const base = JSON.parse(readFileSync(new URL('./fixtures/meter-feed/stale-published.json', import.meta.url)));
+  for (const mutate of [
+    lane => { lane.reason = 'SOURCE_ERROR'; },
+    lane => { lane.identity_binding_status = 'MISMATCH'; },
+    lane => { lane.identity_binding_status = 'UNKNOWN'; },
+    lane => { lane.source_kind = 'UNKNOWN'; },
+    lane => { lane.limitation = 'UNKNOWN'; },
+    lane => { lane.attempted_at = null; },
+    lane => { lane.last_success_at = '2026-09-10T09:07:00.000Z'; },
+  ]) {
+    const raw = structuredClone(base); mutate(raw.lanes.CLAUDE1);
+    const lane = parseMeterFeed(raw, { now: at }).lanes[0];
+    assert.equal(lane.windows[0].remaining_percent, null);
+    assert.equal(lane.windows[0].reset_at, null);
+    assert.equal(lane.freshness, 'ONBEKEND');
+  }
+  for (const value of [-1, 101, 0.5, '50']) {
+    const raw = structuredClone(base); raw.lanes.CLAUDE1.windows[0].remaining_percent = value;
+    assert.equal(parseMeterFeed(raw, { now: at }).available, false);
   }
 });
 

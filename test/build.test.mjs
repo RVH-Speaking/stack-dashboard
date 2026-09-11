@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { toPublicSnapshot, readTextPolicy, planningFromBouwlijst, parseClientPollOrigin, meterSnapshot } from '../scripts/build.mjs';
+import { toPublicSnapshot, readTextPolicy, planningFromBouwlijst, parseClientPollOrigin, meterSnapshot,
+  meterAssetVersion, versionMeterModuleSource } from '../scripts/build.mjs';
 
 /**
  * Een collectorresultaat met velden die nooit gepubliceerd mogen worden (interne notitie,
@@ -326,6 +327,26 @@ test('standalone METER owns same-origin script and cockpit only links to it', as
     assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
     assert.match(cockpit, /href=".\/meter.html"/);
   }
+});
+
+test('METER asset graph gets one deterministic content version without external origins', async () => {
+  const sources = new Map();
+  for (const file of ['meter-poll.mjs', 'meter-feed-input.mjs', 'meter-feed-view.mjs', 'meter-feed.mjs', 'validate.mjs']) {
+    sources.set(file, await readFile(join(ROOT, 'scripts/lib', file), 'utf8'));
+  }
+  const version = meterAssetVersion(sources);
+  assert.match(version, /^[a-f0-9]{16}$/);
+  assert.equal(meterAssetVersion(sources), version);
+  const changed = new Map(sources); changed.set('meter-feed-view.mjs', `${changed.get('meter-feed-view.mjs')}\n`);
+  assert.notEqual(meterAssetVersion(changed), version);
+  const page = (await import('../scripts/lib/render-meter-page.mjs')).renderMeterPage(null, { assetVersion: version });
+  assert.match(page, new RegExp(`src="\\./meter-poll\\.mjs\\?v=${version}"`));
+  assert.match(page, /script-src 'self'/);
+  assert.doesNotMatch(page, /https?:\/\//);
+  const rewritten = versionMeterModuleSource(sources.get('meter-poll.mjs'), version);
+  assert.match(rewritten, new RegExp(`from '\\./meter-feed-input\\.mjs\\?v=${version}'`));
+  assert.match(rewritten, new RegExp(`from '\\./meter-feed-view\\.mjs\\?v=${version}'`));
+  assert.throws(() => versionMeterModuleSource('x', '../hostile'));
 });
 
 test('METER wire preserves source error cause across build and browser reparsing', async () => {

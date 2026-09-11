@@ -286,6 +286,7 @@
           "enum": [
             "UNKNOWN",
             "CLAUDE_ALL",
+            "FABLE",
             "SONNET",
             "OPUS",
             "HAIKU",
