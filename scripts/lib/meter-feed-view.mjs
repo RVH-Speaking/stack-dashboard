@@ -31,8 +31,8 @@ function unanimousDate(windows, field) {
   return values.size === 1 ? windows[0][field] : null;
 }
 
-function quotaSummary(lane, windowAlias, title) {
-  const window = ordinaryWindows(lane).find(item => item.window_alias === windowAlias);
+function quotaSummary(lane, windowAlias, title, modelAlias = modelFor(lane.alias)) {
+  const window = lane.windows.find(item => item.model_alias === modelAlias && item.window_alias === windowAlias);
   const value = window?.remaining_percent;
   const available = value == null ? UNKNOWN : `${value}% beschikbaar`;
   const moment = value == null ? 'geen bewezen bronwaarde' : lane.status === 'VEROUDERD'
@@ -77,7 +77,7 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
     return { ...lane, status, windows: lane.windows.map(window => status === 'ACTUEEL' ? window
       : status === 'VEROUDERD' ? { ...window, countdown_seconds: null }
         : { ...window, remaining_percent: null, countdown_seconds: null, reset_at: null,
-          subscription_renewal_at: null, credit_expires_at: null }) };
+          resets_remaining: null, subscription_renewal_at: null, credit_expires_at: null }) };
   });
   const counts = ['ACTUEEL', 'VEROUDERD', UNKNOWN].map(status =>
     `<div class="metric"><dt>${status}</dt><dd>${lanes.filter(lane => lane.status === status).length}</dd></div>`).join('');
@@ -95,10 +95,16 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
     const ordinary = ordinaryWindows(lane);
     const renewal = unanimousDate(ordinary, 'subscription_renewal_at');
     const expiry = unanimousDate(ordinary, 'credit_expires_at');
+    const resetCounts = new Set(ordinary.map(window => window.resets_remaining).filter(value => value !== null));
+    const resetReserve = resetCounts.size === 1 ? [...resetCounts][0] : null;
+    const resetReserveText = resetReserve === null ? UNKNOWN : resetReserve === 0
+      ? '<span class="reset-warning">geen resetreserve</span>' : `${resetReserve} beschikbaar`;
+    const spark = lane.windows.some(window => window.model_alias === 'CODEX_SPARK')
+      ? `<details class="model-quota"><summary>CODEX_SPARK</summary><div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Spark sessie', 'CODEX_SPARK')}${quotaSummary(lane, 'WEEKLY', 'Spark week', 'CODEX_SPARK')}</div></details>` : '';
     return `<article data-meter-lane="${lane.alias}" data-family="${family(lane.alias)}" data-status="${lane.status}" aria-labelledby="lane-${lane.alias}">
       <header class="lane-head"><div><p class="eyebrow">${family(lane.alias)}</p><h3 id="lane-${lane.alias}">${lane.alias}</h3></div><span class="badge ${lane.status.toLowerCase()}">${lane.status}</span></header>
-      <div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Huidige sessie')}${quotaSummary(lane, 'WEEKLY', 'Gewone week')}</div>
-      <p class="shared-warning">Gedeelde quota worden niet opgeteld.</p><dl class="renewal">${detail(lane.status === 'VEROUDERD' ? 'Abonnementsverlenging (laatst gemeten)' : 'Abonnementsverlenging', renewal ? time(renewal) : noDate)}${detail(lane.status === 'VEROUDERD' ? 'Creditverval (laatst gemeten)' : 'Creditverval', expiry ? time(expiry) : noDate)}${detail('API-kosten / credits', `${UNKNOWN} · bron levert geen kostengegevens`)}</dl>
+      <div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Huidige sessie')}${quotaSummary(lane, 'WEEKLY', 'Gewone week')}</div>${spark}
+      <p class="shared-warning">Gedeelde quota worden niet opgeteld.</p><dl class="renewal">${detail('Resetreserve', resetReserveText)}${detail(lane.status === 'VEROUDERD' ? 'Abonnementsverlenging (laatst gemeten)' : 'Abonnementsverlenging', renewal ? time(renewal) : noDate)}${detail(lane.status === 'VEROUDERD' ? 'Creditverval (laatst gemeten)' : 'Creditverval', expiry ? time(expiry) : noDate)}${detail('API-kosten / credits', `${UNKNOWN} · bron levert geen kostengegevens`)}</dl>
       <details><summary>Bron, fout &amp; betrouwbaarheid</summary><dl>${detail('Foutcategorie', errorCategory(lane))}${detail('Brontype', label(lane.source_kind))}${detail('Bronkwaliteit', label(lane.quality))}${detail('Binding', label(lane.identity_binding_status))}${detail('Laatste succes', time(lane.last_success_at))}${detail('Laatste poging', time(lane.attempted_at))}${detail('Actuele fout', label(lane.reason))}${detail('Beperking', label(lane.limitation))}</dl></details></article>`;
   }).join('');
   const resets = lanes.flatMap(lane => ordinaryWindows(lane)

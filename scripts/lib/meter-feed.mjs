@@ -182,6 +182,7 @@ export const METER_FEED_SCHEMA = freeze({
         "quota_group",
         "remaining_percent",
         "reset_at",
+        "resets_remaining",
         "subscription_renewal_at",
         "credit_expires_at"
       ],
@@ -195,6 +196,7 @@ export const METER_FEED_SCHEMA = freeze({
             "OPUS",
             "HAIKU",
             "CODEX_ALL",
+            "CODEX_SPARK",
             "GEMINI_ALL"
           ]
         },
@@ -333,6 +335,13 @@ export const METER_FEED_SCHEMA = freeze({
           ],
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
         },
+        "resets_remaining": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
         "subscription_renewal_at": {
           "type": [
             "string",
@@ -418,7 +427,8 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
         if (!w.quota_group.startsWith('SHARED_')) continue;
         const key = `${w.quota_group}/${w.window_alias}`;
         const signature = JSON.stringify([lane.source_kind, lane.last_success_at, lane.quality,
-          lane.identity_binding_status, lane.reason, lane.limitation, w.remaining_percent, ...dates.map(k => w[k])]);
+          lane.identity_binding_status, lane.reason, lane.limitation, w.remaining_percent,
+          w.resets_remaining, ...dates.map(k => w[k])]);
         const entries = pots.get(key) ?? [];
         entries.push({ alias, signature }); pots.set(key, entries);
       }
@@ -434,7 +444,8 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
             : ['GEMINI_API_KEY', 'GEMINI_CODE_ASSIST', 'GEMINI_VERTEX'].includes(lane.source_kind);
         const modelOk = lane.windows.every(w => alias.startsWith('CLAUDE')
           ? ['CLAUDE_ALL', 'FABLE', 'SONNET', 'OPUS', 'HAIKU'].includes(w.model_alias)
-          : w.model_alias === (alias.startsWith('CPT') ? 'CODEX_ALL' : 'GEMINI_ALL'));
+          : alias.startsWith('CPT') ? ['CODEX_ALL', 'CODEX_SPARK'].includes(w.model_alias)
+            : w.model_alias === 'GEMINI_ALL');
         const measured = timestamp(lane.last_success_at); const attempted = timestamp(lane.attempted_at);
         const timeOk = measured !== null && attempted !== null && measured <= attempted && attempted <= nowMs;
         // A sanitized publisher roundtrip represents an earlier verified observation as
@@ -479,7 +490,8 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
             const identified = w.window_alias !== 'UNKNOWN' && w.quota_group !== 'UNKNOWN';
             const known = current && identified && (w.reset_at === null || timestamp(w.reset_at) > nowMs);
             const result = { model_alias: w.model_alias, window_alias: w.window_alias, quota_group: w.quota_group,
-              remaining_percent: known || (historical && identified) ? w.remaining_percent : null };
+              remaining_percent: known || (historical && identified) ? w.remaining_percent : null,
+              resets_remaining: known || (historical && identified) ? w.resets_remaining : null };
             for (const key of dates) result[key] = historical && identified
               ? w[key]
               : known && timestamp(w[key]) > nowMs ? w[key] : null;

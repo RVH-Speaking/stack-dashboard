@@ -51,6 +51,7 @@ article{background:linear-gradient(145deg,#182638,var(--panel));border:1px solid
 .lane-quotas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
 .quota-summary{padding:14px;border:1px solid var(--line);border-radius:10px;background:#101a28;min-width:0}
 .shared-warning,.source-limit{font-size:.72rem;color:var(--muted)}
+.reset-warning{color:#ffda93;font-weight:700}.model-quota{margin-top:10px}
 .renewal{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
 .renewal>div:last-child{grid-column:1/-1}
 .capacity{display:flex;align-items:baseline;gap:12px}

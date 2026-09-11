@@ -34,7 +34,8 @@
           "model_alias": "CLAUDE_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     },
@@ -54,7 +55,8 @@
           "model_alias": "CLAUDE_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     },
@@ -74,7 +76,8 @@
           "model_alias": "CLAUDE_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     },
@@ -94,7 +97,8 @@
           "model_alias": "CLAUDE_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     },
@@ -114,7 +118,8 @@
           "model_alias": "CODEX_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     },
@@ -134,7 +139,8 @@
           "model_alias": "CODEX_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     },
@@ -154,7 +160,8 @@
           "model_alias": "GEMINI_ALL",
           "window_alias": "FIVE_HOUR",
           "subscription_renewal_at": null,
-          "credit_expires_at": null
+          "credit_expires_at": null,
+          "resets_remaining": null
         }
       ]
     }

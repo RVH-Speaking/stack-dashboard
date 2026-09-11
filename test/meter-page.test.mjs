@@ -165,6 +165,22 @@ test('compact lane cards expose only session and ordinary week, never FABLE or i
   assert.equal((current.match(/data-meter-lane=/g) ?? []).length, 7);
 });
 
+test('Codex reset reserve is compact, truthful for zero, and unknown when the provider omits it', () => {
+  const raw = JSON.parse(text);
+  raw.lanes.CPT1.windows[0].resets_remaining = 3;
+  raw.lanes.CPT2.windows[0].resets_remaining = 0;
+  const html = renderMeter(JSON.stringify(raw), { now });
+  const cpt1 = html.match(/<article data-meter-lane="CPT1"[\s\S]*?<\/article>/)[0];
+  const cpt2 = html.match(/<article data-meter-lane="CPT2"[\s\S]*?<\/article>/)[0];
+  assert.match(cpt1, /Resetreserve<\/dt><dd>3 beschikbaar/);
+  assert.match(cpt2, /Resetreserve<\/dt><dd><span class="reset-warning">geen resetreserve/);
+  assert.doesNotMatch(cpt2, /GEBLOKKEERD|ACCOUNTBINDING ONBEWEZEN|QUOTA OP/);
+  raw.lanes.CPT2.windows[0].resets_remaining = null;
+  const unknown = renderMeter(JSON.stringify(raw), { now })
+    .match(/<article data-meter-lane="CPT2"[\s\S]*?<\/article>/)[0];
+  assert.match(unknown, /Resetreserve<\/dt><dd>ONBEKEND/);
+});
+
 test('filters intersect provider and status, retain all lanes and handle empty selection', () => {
   const cards = [...renderMeter(text, { now }).matchAll(/data-meter-lane="([^"]+)" data-family="([^"]+)" data-status="([^"]+)"/g)]
     .map(m => ({ dataset: { meterLane: m[1], family: m[2], status: m[3] }, hidden: false }));

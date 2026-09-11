@@ -194,7 +194,7 @@ test('FABLE is a closed Claude-only weekly alias and remains historical across t
   raw.lanes.CLAUDE1.windows.push({
     model_alias: 'FABLE', window_alias: 'WEEKLY', quota_group: 'LANE_LOCAL',
     remaining_percent: 37, reset_at: '2026-09-17T09:00:00.000Z',
-    subscription_renewal_at: null, credit_expires_at: null,
+    resets_remaining: null, subscription_renewal_at: null, credit_expires_at: null,
   });
   const current = parseMeterFeed(raw, { now });
   const currentFable = current.lanes[0].windows[1];
@@ -222,6 +222,26 @@ test('FABLE is a closed Claude-only weekly alias and remains historical across t
     assert.equal(parsed.remaining_percent, 37, `parsed round ${round}`);
     assert.equal(parsed.countdown_seconds, null, `parsed round ${round}`);
   }
+});
+
+test('reset credits and the neutral Spark alias survive current and stale validation without private limit ids', () => {
+  const raw = fixture();
+  for (const window of raw.lanes.CPT2.windows) window.resets_remaining = 0;
+  raw.lanes.CPT1.windows[0].resets_remaining = 3;
+  raw.lanes.CPT1.windows.push({ ...raw.lanes.CPT1.windows[0], model_alias: 'CODEX_SPARK',
+    window_alias: 'WEEKLY', remaining_percent: 100, resets_remaining: 3 });
+  const current = parse(raw);
+  assert.equal(current.lanes[4].windows.find(w => w.model_alias === 'CODEX_SPARK').remaining_percent, 100);
+  assert.equal(current.lanes[5].windows[0].resets_remaining, 0);
+  const stale = parse(raw, { now: new Date('2026-09-10T09:12:00.000Z') });
+  assert.equal(stale.lanes[4].windows[0].resets_remaining, 3);
+  const html = renderMeter(JSON.stringify(raw), { now });
+  assert.match(html, /CODEX_SPARK/);
+  assert.match(html.match(/data-meter-lane="CPT2"[\s\S]*?<\/article>/)[0], /geen resetreserve/);
+  assert.doesNotMatch(html, /codex_bengalfox|GPT-5\.3-Codex-Spark/);
+
+  raw.lanes.CPT1.windows[1].model_alias = 'codex_bengalfox';
+  assert.equal(parse(raw).available, false);
 });
 
 test('FABLE rejects non-Claude products, raw provider labels and arbitrary model text', () => {
