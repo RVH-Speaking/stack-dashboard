@@ -1,7 +1,7 @@
 /** Closed public DTO. No account identifiers, arbitrary strings or quota totals. */
 import { validate } from './validate.mjs';
 export const METER_ALIASES = Object.freeze(['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2', 'GEMINI1']);
-export const METER_STALE_MS = 300_000;
+export const METER_STALE_MS = 720_000;
 export const PROCESSOR_STALE_MS = 1_200_000;
 function freeze(value) {
   if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
@@ -357,6 +357,10 @@ function timestamp(value) {
   const ms = Date.parse(value);
   return Number.isFinite(ms) && new Date(ms).toISOString() === value ? ms : null;
 }
+export function meterMeasurementIsStale(lastSuccessAt, nowMs) {
+  const measured = timestamp(lastSuccessAt);
+  return measured !== null && Number.isFinite(nowMs) && nowMs - measured >= METER_STALE_MS;
+}
 const unknown = alias => ({ alias, identity_binding_status: 'UNKNOWN', source_kind: 'UNKNOWN',
   quality: 'UNKNOWN', reason: 'INVALID_FEED', limitation: 'UNKNOWN', freshness: 'ONBEKEND',
   last_success_at: null, attempted_at: null, windows: [] });
@@ -456,7 +460,7 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
           if (!sourceOk || lane.identity_binding_status !== 'PROVEN') reason = 'BINDING_UNPROVEN';
           else if (lane.quality !== 'VERIFIED' || lane.limitation !== 'NONE') reason = 'SOURCE_ERROR';
           else if (!timeOk) reason = 'INVALID_TIME';
-          else if (fallback || nowMs - measured > METER_STALE_MS) reason = 'STALE';
+          else if (fallback || meterMeasurementIsStale(lane.last_success_at, nowMs)) reason = 'STALE';
         }
         const current = reason === 'NONE' && lane.quality === 'VERIFIED';
         // A stale value is still a proven historical observation when the only

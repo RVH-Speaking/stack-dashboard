@@ -15,8 +15,9 @@ test('standalone has accessible mobile shell, navigation, filters and explicit u
   const html = renderMeterPage(text, { now });
   for (const expression of [/lang="nl"/, /name="viewport"/, /@media\(max-width:640px\)/,
     /:focus-visible/, /<main id="main">/, /<h1>/, /<label for="meter-family">/, /<label for="meter-status">/,
-    /download="meter-feed.json"/, /href=".\/index.html"/, /ONVOLDOENDE METINGEN/, /<noscript>/,
-    /id="health-heading"/, /id="subscriptions-heading"/, /id="resets-heading"/]) assert.match(html, expression);
+    /download="meter-feed.json"/, /href=".\/index.html"/, /<noscript>/, /100% = volledig beschikbaar/,
+    /0% = op \/ verbruikt/, /Hoogste sessiecapaciteit/, /Trend \/ delta/, /id="health-heading"/,
+    /id="resets-heading"/]) assert.match(html, expression);
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%|42\.5%|LOCAL_HOST/);
   const staleStatic = renderMeterPage(text, { now: new Date('2026-09-10T09:06:00.000Z') });
@@ -40,10 +41,12 @@ test('mobile layout permits shrinking without clipping navigation, filters or me
   assert.doesNotMatch(css, /overflow(?:-x)?\s*:\s*(?:hidden|clip)/);
 });
 
-test('live overview separates publication from source and exposes all windows without totals', () => {
+test('live overview separates publication, source, session and ordinary weekly capacity', () => {
   const raw = JSON.parse(text);
   raw.published_at = '2026-09-10T09:00:30.000Z';
-  raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], model_alias: 'OPUS', window_alias: 'WEEKLY',
+  raw.lanes.CLAUDE1.windows[0].subscription_renewal_at = '2026-10-01T00:00:00.000Z';
+  raw.lanes.CLAUDE1.windows[0].credit_expires_at = '2026-10-02T00:00:00.000Z';
+  raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], model_alias: 'CLAUDE_ALL', window_alias: 'WEEKLY',
     reset_at: '2026-09-10T09:45:00.000Z', subscription_renewal_at: '2026-10-01T00:00:00.000Z', credit_expires_at: '2026-10-02T00:00:00.000Z' });
   const html = renderMeter(JSON.stringify(raw), { now, refreshStatus: 'active' });
   assert.match(html, /<dt>ACTUEEL<\/dt><dd>6<\/dd>/);
@@ -51,7 +54,9 @@ test('live overview separates publication from source and exposes all windows wi
   assert.match(html, /Laatste publicatie[\s\S]*?09:00:30/);
   assert.match(html, /Nieuwste bronmeting[\s\S]*?09:00:00/);
   assert.match(html, /Meetleeftijd<\/dt><dd>60s/);
-  assert.match(html, /OPUS <span>WEEKLY/);
+  assert.match(html, /Huidige sessie/);
+  assert.match(html, /Gewone week/);
+  assert.match(html, /50% beschikbaar/);
   assert.match(html, /2026-10-01T00:00:00.000Z/);
   assert.match(html, /2026-10-02T00:00:00.000Z/);
   assert.match(html, /<meter min="0" max="100" value="50"/);
@@ -71,8 +76,8 @@ test('PROCESSOR stale retains measured capacity but suppresses current overload;
   let html = renderMeter(text, { now: new Date('2026-09-10T09:20:00.001Z') });
   let panel = html.match(/<section class="processor"[\s\S]*?<\/section>/)[0];
   assert.match(panel, /data-processor-status="VEROUDERD"/);
-  assert.match(panel, /42.5%[\s\S]*?laatst gemeten/);
-  assert.match(panel, /Overload<\/dt><dd>ONBEKEND/);
+  assert.match(panel, /57.5% beschikbaar[\s\S]*?laatst gemeten/);
+  assert.match(panel, /Status<\/dt><dd>ONBEKEND/);
   assert.doesNotMatch(panel, /OVERLOADED/);
 
   const raw = JSON.parse(text); delete raw.processor;
@@ -83,8 +88,11 @@ test('PROCESSOR stale retains measured capacity but suppresses current overload;
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
 });
 
-test('five-minute boundary labels historical capacity and reset while stopping countdown and calendar', () => {
-  const stale = renderMeter(text, { now: new Date('2026-09-10T09:05:00.000Z') });
+test('twelve-minute boundary labels historical capacity and reset while stopping countdown and calendar', () => {
+  const before = renderMeter(text, { now: new Date('2026-09-10T09:11:59.999Z') });
+  assert.match(before, /data-status="ACTUEEL"/);
+  assert.match(before, /data-meter-countdown/);
+  const stale = renderMeter(text, { now: new Date('2026-09-10T09:12:00.000Z') });
   assert.match(stale, /<dt>VEROUDERD<\/dt><dd>6<\/dd>/);
   assert.match(stale, /50%[\s\S]*?laatst gemeten · <time datetime="2026-09-10T09:00:00.000Z"/);
   assert.match(stale, /Reset volgens laatste meting \(UTC\)/);
@@ -101,13 +109,60 @@ test('five-minute boundary labels historical capacity and reset while stopping c
 test('stale reset transition keeps only an explicitly historical source value', () => {
   const raw = JSON.parse(text);
   raw.lanes.CLAUDE1.windows[0].reset_at = '2026-09-10T09:01:00.000Z';
-  const html = renderMeter(JSON.stringify(raw), { now: new Date('2026-09-10T09:06:00.000Z') });
+  const html = renderMeter(JSON.stringify(raw), { now: new Date('2026-09-10T09:12:00.000Z') });
   const claude = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
   assert.match(claude, /50%/);
   assert.match(claude, /laatst gemeten/);
   assert.match(claude, /Reset volgens laatste meting \(UTC\)[\s\S]*?2026-09-10 09:01:00 UTC/);
-  assert.match(claude, /Reset over<\/dt><dd>ONBEKEND/);
+  assert.match(claude, /Resterende tijd<\/dt><dd>ONBEKEND/);
   assert.doesNotMatch(claude, /data-meter-countdown|data-status="ACTUEEL"/);
+});
+
+test('compact lane cards expose only session and ordinary week, never FABLE or invented history', () => {
+  const raw = JSON.parse(text);
+  raw.lanes.CLAUDE1.windows[0].subscription_renewal_at = '2026-10-01T00:00:00.000Z';
+  raw.lanes.CLAUDE1.windows[0].credit_expires_at = '2026-10-02T00:00:00.000Z';
+  raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], model_alias: 'CLAUDE_ALL',
+    window_alias: 'WEEKLY', remaining_percent: 80, reset_at: '2026-09-17T10:00:00.000Z',
+    subscription_renewal_at: '2026-10-01T00:00:00.000Z', credit_expires_at: '2026-10-02T00:00:00.000Z' });
+  raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], model_alias: 'FABLE',
+    window_alias: 'WEEKLY', remaining_percent: 37, reset_at: '2026-09-18T10:00:00.000Z' });
+  const current = renderMeter(JSON.stringify(raw), { now, refreshStatus: 'active' });
+  const lane = current.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /aria-label="CLAUDE1 Huidige sessie"/);
+  assert.match(lane, /50% beschikbaar/);
+  assert.match(lane, /aria-label="CLAUDE1 Gewone week"/);
+  assert.match(lane, /80% beschikbaar/);
+  assert.match(lane, /2026-10-01 00:00:00 UTC/);
+  assert.match(lane, /2026-10-02 00:00:00 UTC/);
+  assert.match(lane, /aria-label="CLAUDE1 Huidige sessie: 50 procent beschikbaar"/);
+  assert.doesNotMatch(current, /FABLE|37%/);
+  assert.match(current, /Hoogste sessiecapaciteit<\/dt><dd>CLAUDE1 · 50% beschikbaar/);
+  assert.doesNotMatch(current, /Beste volgende lane/);
+  assert.match(current, /Trend \/ delta<\/dt><dd>ONBEKEND · minimaal twee bewezen metingen nodig/);
+  assert.match(current, /API-kosten \/ credits<\/dt><dd>ONBEKEND · bron levert geen kostengegevens/);
+
+  const stale = renderMeter(JSON.stringify(raw), { now: new Date('2026-09-10T09:12:00.000Z') });
+  const oldLane = stale.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(oldLane, /80% beschikbaar[\s\S]*?laatst gemeten/);
+  assert.match(oldLane, /Abonnementsverlenging \(laatst gemeten\)/);
+  assert.match(oldLane, /Reset volgens laatste meting \(UTC\)/);
+  assert.doesNotMatch(stale, /data-meter-countdown|FABLE|37%/);
+  assert.match(stale, /<ol class="timeline"><li>ONBEKEND/);
+
+  const gemini = current.match(/<article data-meter-lane="GEMINI1"[\s\S]*?<\/article>/)[0];
+  assert.match(gemini, /Foutcategorie<\/dt><dd>ACCOUNTBINDING ONBEWEZEN/);
+  assert.doesNotMatch(gemini, /LOGIN/);
+  assert.doesNotMatch(gemini, /<meter |% beschikbaar/);
+  raw.lanes.CLAUDE2.windows[0].remaining_percent = 0;
+  const exhausted = renderMeter(JSON.stringify(raw), { now }).match(/<article data-meter-lane="CLAUDE2"[\s\S]*?<\/article>/)[0];
+  assert.match(exhausted, /0% beschikbaar/);
+  assert.match(exhausted, /Foutcategorie<\/dt><dd>QUOTA OP/);
+  raw.lanes.CLAUDE1.windows[1].subscription_renewal_at = '2026-10-03T00:00:00.000Z';
+  const divergent = renderMeter(JSON.stringify(raw), { now }).match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(divergent, /Abonnementsverlenging<\/dt><dd>ONBEKEND[\s\S]*?bron levert geen datum/);
+  assert.doesNotMatch(divergent, /2026-10-01 00:00:00 UTC|2026-10-03 00:00:00 UTC/);
+  assert.equal((current.match(/data-meter-lane=/g) ?? []).length, 7);
 });
 
 test('filters intersect provider and status, retain all lanes and handle empty selection', () => {
