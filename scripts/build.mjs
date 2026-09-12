@@ -116,7 +116,7 @@ function arg(name, fallback = null) {
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-/** One closed wire snapshot for all seven lanes; never serialize raw input or view fields. */
+/** One closed wire snapshot for all eight lanes; never serialize raw input or view fields. */
 export function meterSnapshot(text, now = new Date()) {
   const feed = meterFeedFromText(text, { now });
   const { freshness, ...processor } = feed.processor;

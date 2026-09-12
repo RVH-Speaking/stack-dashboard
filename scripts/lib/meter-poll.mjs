@@ -1,4 +1,4 @@
-/** Same-origin Pages consumer; all seven lanes are replaced from one response. */
+/** Same-origin Pages consumer; all eight lanes are replaced from one response. */
 import { meterFeedFromText, METER_MAX_BYTES } from './meter-feed-input.mjs';
 import { renderMeter } from './meter-feed-view.mjs';
 
@@ -51,7 +51,7 @@ export function createMeterPoller({ origin, pageUrl = `${origin}/`, fetchImpl, r
   return Object.freeze({ tick, pollOnce });
 }
 
-/** Filters change visibility only; the complete seven-lane response stays in memory/DOM. */
+/** Filters change visibility only; the complete eight-lane response stays in memory/DOM. */
 export function applyMeterFilters(doc) {
   const family = doc.getElementById('meter-family')?.value ?? 'Alles';
   const status = doc.getElementById('meter-status')?.value ?? 'Alles';

@@ -18,11 +18,11 @@ test('standalone has accessible mobile shell, navigation, filters and explicit u
     /download="meter-feed.json"/, /href=".\/index.html"/, /<noscript>/, /Beslisregel:/,
     /Direct inzetbaar/, /Trend \/ delta/, /id="health-heading"/,
     /id="resets-heading"/]) assert.match(html, expression);
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
   assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%|42\.5%|LOCAL_HOST/);
   const staleStatic = renderMeterPage(text, { now: new Date('2026-09-10T09:06:00.000Z') });
   assert.doesNotMatch(staleStatic, /data-meter-countdown|value="50"|50%|data-status="VEROUDERD"/);
-  assert.equal((staleStatic.match(/data-status="ONBEKEND"/g) ?? []).length, 7);
+  assert.equal((staleStatic.match(/data-status="ONBEKEND"/g) ?? []).length, 8);
 });
 
 test('mobile layout permits shrinking without clipping navigation, filters or metrics', () => {
@@ -50,7 +50,7 @@ test('live overview separates publication, source, session and ordinary weekly c
     reset_at: '2026-09-10T09:45:00.000Z', subscription_renewal_at: '2026-10-01T00:00:00.000Z', credit_expires_at: '2026-10-02T00:00:00.000Z' });
   const html = renderMeter(JSON.stringify(raw), { now, refreshStatus: 'active' });
   assert.match(html, /<dt>BESCHIKBAAR<\/dt><dd>1<\/dd>/);
-  assert.match(html, /<dt>ONBEKEND<\/dt><dd>6<\/dd>/);
+  assert.match(html, /<dt>ONBEKEND<\/dt><dd>7<\/dd>/);
   assert.match(html, /Laatste publicatie[\s\S]*?10-09-2026 11:00:30/);
   assert.match(html, /Nieuwste bronmeting[\s\S]*?10-09-2026 11:00:00/);
   assert.match(html, /Meetleeftijd<\/dt><dd>60s/);
@@ -85,7 +85,7 @@ test('PROCESSOR stale retains measured capacity but suppresses current overload;
   panel = html.match(/<section class="processor"[\s\S]*?<\/section>/)[0];
   assert.match(panel, /data-processor-status="UNKNOWN"/);
   assert.doesNotMatch(panel, /42.5%|LOCAL_HOST/);
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
 });
 
 test('twelve-minute boundary labels historical capacity and reset while stopping countdown and calendar', () => {
@@ -162,7 +162,7 @@ test('compact lane cards expose only session and ordinary week, never FABLE or i
   const divergent = renderMeter(JSON.stringify(raw), { now }).match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
   assert.match(divergent, /Abonnementsverlenging<\/dt><dd>ONBEKEND[\s\S]*?bron levert geen datum/);
   assert.doesNotMatch(divergent, /01-10-2026 02:00:00|03-10-2026 02:00:00/);
-  assert.equal((current.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((current.match(/data-meter-lane=/g) ?? []).length, 8);
 });
 
 test('fresh source proof exposes successful measurement, attempt and a usable decision separately', () => {
@@ -267,11 +267,11 @@ test('Amsterdam formatting converts each UTC instant once across date and DST bo
   assert.equal(formatAmsterdamTime('not-a-date'), 'ONBEKEND');
 });
 
-test('missing or invalid feed fields fail closed to seven unknown lanes', () => {
+test('missing or invalid feed fields fail closed to eight unknown lanes', () => {
   for (const raw of [{ version: 2 }, { ...JSON.parse(text), published_at: 'invalid' }]) {
     const html = renderMeter(JSON.stringify(raw), { now });
-    assert.match(html, /<dt>ONBEKEND<\/dt><dd>7<\/dd>/);
-    assert.equal((html.match(/data-availability="ONBEKEND"/g) ?? []).length, 7);
+    assert.match(html, /<dt>ONBEKEND<\/dt><dd>8<\/dd>/);
+    assert.equal((html.match(/data-availability="ONBEKEND"/g) ?? []).length, 8);
     assert.doesNotMatch(html, /<meter |data-meter-countdown/);
   }
 });
@@ -297,7 +297,7 @@ test('filters intersect provider and status, retain all lanes and handle empty s
     .map(m => ({ dataset: { meterLane: m[1], family: m[2], status: m[3] }, hidden: false }));
   const controls = { 'meter-family': { value: 'Alles' }, 'meter-status': { value: 'Alles' }, 'meter-filter-empty': {} };
   const doc = { getElementById: id => controls[id], querySelectorAll: () => cards };
-  for (const [family, expected] of [['Alles', 7], ['Claude', 4], ['Codex', 2], ['Gemini', 1]]) {
+  for (const [family, expected] of [['Alles', 8], ['Claude', 4], ['Codex', 3], ['Gemini', 1]]) {
     controls['meter-family'].value = family; applyMeterFilters(doc);
     assert.equal(cards.filter(c => !c.hidden).length, expected);
   }
@@ -308,7 +308,7 @@ test('filters intersect provider and status, retain all lanes and handle empty s
   assert.equal(cards.filter(c => !c.hidden).length, 6);
   cards[0].dataset.status = 'VEROUDERD'; applyMeterFilters(doc);
   assert.equal(cards.filter(c => !c.hidden).length, 5);
-  assert.equal(cards.length, 7);
+  assert.equal(cards.length, 8);
   assert.equal(controls['meter-status'].value, 'ACTUEEL');
 });
 
@@ -331,7 +331,7 @@ test('offline build publishes standalone endpoint through existing allowlist and
     const page = readFileSync(join(root, 'public/meter.html'), 'utf8');
     assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
     assert.match(cockpit, /href=".\/meter.html"/);
-    assert.equal((page.match(/data-meter-lane=/g) ?? []).length, 7);
+    assert.equal((page.match(/data-meter-lane=/g) ?? []).length, 8);
     const assetVersion = page.match(/src="\.\/meter-poll\.mjs\?v=([a-f0-9]{16})"/)?.[1];
     assert.ok(assetVersion);
     assert.match(page, /script-src 'self'/);
