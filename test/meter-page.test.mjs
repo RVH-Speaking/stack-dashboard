@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, cpSync, mkdirSync, writeFileSync, rmSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { renderMeter } from '../scripts/lib/meter-feed-view.mjs';
+import { formatAmsterdamTime, renderMeter } from '../scripts/lib/meter-feed-view.mjs';
 import { renderMeterPage } from '../scripts/lib/render-meter-page.mjs';
 import { applyMeterFilters } from '../scripts/lib/meter-poll.mjs';
 import { assertPublishFiles, PUBLISH_ALLOWLIST } from '../scripts/lib/publish-files.mjs';
@@ -15,8 +15,8 @@ test('standalone has accessible mobile shell, navigation, filters and explicit u
   const html = renderMeterPage(text, { now });
   for (const expression of [/lang="nl"/, /name="viewport"/, /@media\(max-width:640px\)/,
     /:focus-visible/, /<main id="main">/, /<h1>/, /<label for="meter-family">/, /<label for="meter-status">/,
-    /download="meter-feed.json"/, /href=".\/index.html"/, /<noscript>/, /100% = volledig beschikbaar/,
-    /0% = op \/ verbruikt/, /Hoogste sessiecapaciteit/, /Trend \/ delta/, /id="health-heading"/,
+    /download="meter-feed.json"/, /href=".\/index.html"/, /<noscript>/, /Beslisregel:/,
+    /Direct inzetbaar/, /Trend \/ delta/, /id="health-heading"/,
     /id="resets-heading"/]) assert.match(html, expression);
   assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
   assert.doesNotMatch(html, /data-meter-countdown|value="50"|50%|42\.5%|LOCAL_HOST/);
@@ -35,7 +35,7 @@ test('mobile layout permits shrinking without clipping navigation, filters or me
   assert.match(rule('.topnav>*'), /overflow-wrap:anywhere/);
   assert.match(rule('.filters label'), /min-width:0/);
   assert.match(rule('select'), /min-width:0;width:100%/);
-  assert.match(rule('.metrics'), /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(rule('.metrics'), /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(rule('.metric'), /min-width:0/);
   assert.match(rule('.metric'), /overflow-wrap:anywhere/);
   assert.doesNotMatch(css, /overflow(?:-x)?\s*:\s*(?:hidden|clip)/);
@@ -49,10 +49,10 @@ test('live overview separates publication, source, session and ordinary weekly c
   raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], model_alias: 'CLAUDE_ALL', window_alias: 'WEEKLY',
     reset_at: '2026-09-10T09:45:00.000Z', subscription_renewal_at: '2026-10-01T00:00:00.000Z', credit_expires_at: '2026-10-02T00:00:00.000Z' });
   const html = renderMeter(JSON.stringify(raw), { now, refreshStatus: 'active' });
-  assert.match(html, /<dt>ACTUEEL<\/dt><dd>6<\/dd>/);
-  assert.match(html, /<dt>ONBEKEND<\/dt><dd>1<\/dd>/);
-  assert.match(html, /Laatste publicatie[\s\S]*?09:00:30/);
-  assert.match(html, /Nieuwste bronmeting[\s\S]*?09:00:00/);
+  assert.match(html, /<dt>BESCHIKBAAR<\/dt><dd>1<\/dd>/);
+  assert.match(html, /<dt>ONBEKEND<\/dt><dd>6<\/dd>/);
+  assert.match(html, /Laatste publicatie[\s\S]*?10-09-2026 11:00:30/);
+  assert.match(html, /Nieuwste bronmeting[\s\S]*?10-09-2026 11:00:00/);
   assert.match(html, /Meetleeftijd<\/dt><dd>60s/);
   assert.match(html, /Huidige sessie/);
   assert.match(html, /Gewone week/);
@@ -95,7 +95,7 @@ test('twelve-minute boundary labels historical capacity and reset while stopping
   const stale = renderMeter(text, { now: new Date('2026-09-10T09:12:00.000Z') });
   assert.match(stale, /<dt>VEROUDERD<\/dt><dd>6<\/dd>/);
   assert.match(stale, /50%[\s\S]*?laatst gemeten · <time datetime="2026-09-10T09:00:00.000Z"/);
-  assert.match(stale, /Reset volgens laatste meting \(UTC\)/);
+  assert.match(stale, /Reset volgens laatste meting/);
   assert.doesNotMatch(stale, /data-meter-countdown/);
   assert.match(stale, /<ol class="timeline"><li>ONBEKEND/);
   const raw = JSON.parse(text);
@@ -113,7 +113,7 @@ test('stale reset transition keeps only an explicitly historical source value', 
   const claude = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
   assert.match(claude, /50%/);
   assert.match(claude, /laatst gemeten/);
-  assert.match(claude, /Reset volgens laatste meting \(UTC\)[\s\S]*?2026-09-10 09:01:00 UTC/);
+  assert.match(claude, /Reset volgens laatste meting[\s\S]*?10-09-2026 11:01:00[\s\S]*?Amsterdam/);
   assert.match(claude, /Resterende tijd<\/dt><dd>ONBEKEND/);
   assert.doesNotMatch(claude, /data-meter-countdown|data-status="ACTUEEL"/);
 });
@@ -133,11 +133,11 @@ test('compact lane cards expose only session and ordinary week, never FABLE or i
   assert.match(lane, /50% beschikbaar/);
   assert.match(lane, /aria-label="CLAUDE1 Gewone week"/);
   assert.match(lane, /80% beschikbaar/);
-  assert.match(lane, /2026-10-01 00:00:00 UTC/);
-  assert.match(lane, /2026-10-02 00:00:00 UTC/);
+  assert.match(lane, /01-10-2026 02:00:00[\s\S]*?Amsterdam/);
+  assert.match(lane, /02-10-2026 02:00:00[\s\S]*?Amsterdam/);
   assert.match(lane, /aria-label="CLAUDE1 Huidige sessie: 50 procent beschikbaar"/);
   assert.doesNotMatch(current, /FABLE|37%/);
-  assert.match(current, /Hoogste sessiecapaciteit<\/dt><dd>CLAUDE1 · 50% beschikbaar/);
+  assert.match(current, /Direct inzetbaar<\/dt><dd>CLAUDE1/);
   assert.doesNotMatch(current, /Beste volgende lane/);
   assert.match(current, /Trend \/ delta<\/dt><dd>ONBEKEND · minimaal twee bewezen metingen nodig/);
   assert.match(current, /API-kosten \/ credits<\/dt><dd>ONBEKEND · bron levert geen kostengegevens/);
@@ -146,7 +146,7 @@ test('compact lane cards expose only session and ordinary week, never FABLE or i
   const oldLane = stale.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
   assert.match(oldLane, /80% beschikbaar[\s\S]*?laatst gemeten/);
   assert.match(oldLane, /Abonnementsverlenging \(laatst gemeten\)/);
-  assert.match(oldLane, /Reset volgens laatste meting \(UTC\)/);
+  assert.match(oldLane, /Reset volgens laatste meting/);
   assert.doesNotMatch(stale, /data-meter-countdown|FABLE|37%/);
   assert.match(stale, /<ol class="timeline"><li>ONBEKEND/);
 
@@ -161,8 +161,119 @@ test('compact lane cards expose only session and ordinary week, never FABLE or i
   raw.lanes.CLAUDE1.windows[1].subscription_renewal_at = '2026-10-03T00:00:00.000Z';
   const divergent = renderMeter(JSON.stringify(raw), { now }).match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
   assert.match(divergent, /Abonnementsverlenging<\/dt><dd>ONBEKEND[\s\S]*?bron levert geen datum/);
-  assert.doesNotMatch(divergent, /2026-10-01 00:00:00 UTC|2026-10-03 00:00:00 UTC/);
+  assert.doesNotMatch(divergent, /01-10-2026 02:00:00|03-10-2026 02:00:00/);
   assert.equal((current.match(/data-meter-lane=/g) ?? []).length, 7);
+});
+
+test('fresh source proof exposes successful measurement, attempt and a usable decision separately', () => {
+  const raw = JSON.parse(text);
+  raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], window_alias: 'WEEKLY',
+    reset_at: '2026-09-17T10:00:00.000Z' });
+  const html = renderMeter(JSON.stringify(raw), { now, refreshStatus: 'active' });
+  const lane = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /data-availability="BESCHIKBAAR"/);
+  assert.match(lane, /<strong>Inzetbaar<\/strong>/);
+  assert.match(lane, /Accountbinding<\/dt><dd>PROVEN/);
+  assert.match(lane, /Bronkwaliteit<\/dt><dd>ACTUEEL/);
+  assert.match(lane, /Laatste succesvolle bronmeting[\s\S]*?10-09-2026 11:00:00/);
+  assert.match(lane, /Laatste meetpoging[\s\S]*?10-09-2026 11:00:00/);
+  assert.match(lane, /Taakuitvoering bewezen<\/dt><dd>ONBEKEND/);
+});
+
+test('failed attempt keeps an older success visible but never presents its quota as current', () => {
+  const raw = JSON.parse(text);
+  Object.assign(raw.lanes.CLAUDE1, {
+    quality: 'ERROR', reason: 'SOURCE_ERROR', attempted_at: '2026-09-10T09:04:00.000Z',
+  });
+  const html = renderMeter(JSON.stringify(raw), { now: new Date('2026-09-10T09:05:00.000Z') });
+  const lane = html.match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /data-availability="ONBEKEND"/);
+  assert.match(lane, /Bronkwaliteit<\/dt><dd>FOUT/);
+  assert.match(lane, /Laatste succesvolle bronmeting[\s\S]*?10-09-2026 11:00:00/);
+  assert.match(lane, /Laatste meetpoging[\s\S]*?10-09-2026 11:04:00/);
+  assert.doesNotMatch(lane, /50% beschikbaar|<meter /);
+});
+
+test('missing account binding remains unknown even when quota-shaped values are present', () => {
+  const raw = JSON.parse(text);
+  Object.assign(raw.lanes.CLAUDE1, {
+    identity_binding_status: 'UNKNOWN', quality: 'UNKNOWN', reason: 'BINDING_UNPROVEN',
+    limitation: 'BINDING_UNPROVEN',
+  });
+  const lane = renderMeter(JSON.stringify(raw), { now })
+    .match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /data-availability="ONBEKEND"/);
+  assert.match(lane, /Accountbinding<\/dt><dd>ONBEKEND/);
+  assert.match(lane, /Accountbinding is niet bewezen/);
+  assert.doesNotMatch(lane, /50% beschikbaar|<meter /);
+});
+
+test('zero ordinary week defeats a free short window and separate Spark quota', () => {
+  const raw = JSON.parse(text);
+  const base = raw.lanes.CPT1.windows[0];
+  base.remaining_percent = 80;
+  raw.lanes.CPT1.windows.push({ ...base, model_alias: 'CODEX_ALL', window_alias: 'WEEKLY',
+    remaining_percent: 0, reset_at: '2026-09-17T10:00:00.000Z' });
+  raw.lanes.CPT1.windows.push({ ...base, model_alias: 'CODEX_SPARK', window_alias: 'FIVE_HOUR',
+    remaining_percent: 100 });
+  raw.lanes.CPT1.windows.push({ ...base, model_alias: 'CODEX_SPARK', window_alias: 'WEEKLY',
+    remaining_percent: 100, reset_at: '2026-09-17T10:00:00.000Z' });
+  const html = renderMeter(JSON.stringify(raw), { now });
+  const lane = html.match(/<article data-meter-lane="CPT1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /data-availability="UITGEPUT"/);
+  assert.match(lane, /<strong>Niet inzetbaar<\/strong>/);
+  assert.match(lane, /Gewone week[\s\S]*?0% beschikbaar/);
+  assert.match(lane, /Aparte modelquota: CODEX_SPARK/);
+  assert.match(lane, /verandert de algemene inzetbaarheid hierboven niet/);
+  assert.doesNotMatch(html, /Direct inzetbaar<\/dt><dd>[^<]*CPT1/);
+});
+
+test('proven zero week stays exhausted when the general short window is absent', () => {
+  const raw = JSON.parse(text);
+  const base = raw.lanes.CPT1.windows[0];
+  raw.lanes.CPT1.windows = [
+    { ...base, model_alias: 'CODEX_ALL', window_alias: 'WEEKLY', remaining_percent: 0,
+      reset_at: '2026-09-17T10:00:00.000Z' },
+    { ...base, model_alias: 'CODEX_SPARK', window_alias: 'FIVE_HOUR', remaining_percent: 100 },
+    { ...base, model_alias: 'CODEX_SPARK', window_alias: 'WEEKLY', remaining_percent: 100,
+      reset_at: '2026-09-17T10:00:00.000Z' },
+  ];
+  const html = renderMeter(JSON.stringify(raw), { now });
+  const lane = html.match(/<article data-meter-lane="CPT1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /data-availability="UITGEPUT"/);
+  assert.match(lane, /Gewone week[\s\S]*?0% beschikbaar/);
+  assert.match(lane, /Huidige sessie[\s\S]*?ONBEKEND/);
+  assert.match(lane, /Aparte modelquota: CODEX_SPARK/);
+});
+
+test('missing reset date stays explicit without erasing a fresh measured percentage', () => {
+  const raw = JSON.parse(text);
+  raw.lanes.CLAUDE1.windows[0].reset_at = null;
+  raw.lanes.CLAUDE1.windows.push({ ...raw.lanes.CLAUDE1.windows[0], window_alias: 'WEEKLY',
+    reset_at: '2026-09-17T10:00:00.000Z' });
+  const lane = renderMeter(JSON.stringify(raw), { now })
+    .match(/<article data-meter-lane="CLAUDE1"[\s\S]*?<\/article>/)[0];
+  assert.match(lane, /data-availability="BESCHIKBAAR"/);
+  assert.match(lane, /50% beschikbaar/);
+  assert.match(lane, /Reset<\/dt><dd>ONBEKEND/);
+  assert.match(lane, /Resterende tijd<\/dt><dd>ONBEKEND/);
+});
+
+test('Amsterdam formatting converts each UTC instant once across date and DST boundaries', () => {
+  assert.equal(formatAmsterdamTime('2026-01-31T23:30:00.000Z'), '01-02-2026 00:30:00 CET');
+  assert.equal(formatAmsterdamTime('2026-06-30T22:30:00.000Z'), '01-07-2026 00:30:00 CEST');
+  assert.equal(formatAmsterdamTime('2026-10-25T00:30:00.000Z'), '25-10-2026 02:30:00 CEST');
+  assert.equal(formatAmsterdamTime('2026-10-25T01:30:00.000Z'), '25-10-2026 02:30:00 CET');
+  assert.equal(formatAmsterdamTime('not-a-date'), 'ONBEKEND');
+});
+
+test('missing or invalid feed fields fail closed to seven unknown lanes', () => {
+  for (const raw of [{ version: 2 }, { ...JSON.parse(text), published_at: 'invalid' }]) {
+    const html = renderMeter(JSON.stringify(raw), { now });
+    assert.match(html, /<dt>ONBEKEND<\/dt><dd>7<\/dd>/);
+    assert.equal((html.match(/data-availability="ONBEKEND"/g) ?? []).length, 7);
+    assert.doesNotMatch(html, /<meter |data-meter-countdown/);
+  }
 });
 
 test('Codex reset reserve is compact, truthful for zero, and unknown when the provider omits it', () => {

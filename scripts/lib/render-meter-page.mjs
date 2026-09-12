@@ -26,10 +26,12 @@ p{color:var(--muted)}
 .filters{display:flex;flex-wrap:wrap;gap:20px;padding:20px 0 30px}
 .filters label{display:grid;gap:6px;font-size:.85rem;color:var(--muted)}
 select{min-width:180px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:12px;font:inherit}
-.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 24px}
 .metric dt{font-size:.75rem;letter-spacing:.1em;color:var(--muted)}
 .metric dd{font-size:2.6rem;font-weight:700;margin:8px 0 0;line-height:1.1}
+.metric.beschikbaar{border-color:#458b79}.metric.uitgeput{border-color:#a95757}
+.metric.verouderd{border-color:#a37d3b}
 dl{margin:0}
 dl>div{margin:10px 0}
 dt{color:var(--muted);font-size:.8rem}
@@ -42,27 +44,39 @@ dd{margin:3px 0;overflow-wrap:anywhere}
 .processor-grid>dl,.processor-primary{min-width:0;padding:18px;border:1px solid var(--line);border-radius:12px;background:#101a28}
 .processor-primary strong{display:block;font-size:2.7rem;line-height:1.05}
 .processor-primary span,.processor-primary small{display:block;color:var(--muted);font-size:.78rem;margin-top:7px}
-.lane-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.lane-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
 article{background:linear-gradient(145deg,#182638,var(--panel));border:1px solid var(--line);border-radius:16px;padding:24px;min-width:0}
+article[data-availability="BESCHIKBAAR"]{border-color:#458b79}
+article[data-availability="UITGEPUT"]{border-color:#a95757}
+article[data-availability="VEROUDERD"]{border-color:#a37d3b}
 .lane-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .badge{font-size:.68rem;font-weight:800;letter-spacing:.07em;border:1px solid var(--line);padding:5px 9px;border-radius:30px;color:#d2dbea}
 .actueel{color:#a3f2d8;border-color:#458b79}
 .verouderd{color:#ffda93;border-color:#a37d3b}
+.decision{display:grid;gap:3px;margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#101a28}
+.decision strong{font-size:1.12rem}.decision span{color:var(--muted);font-size:.82rem}
+.decision.beschikbaar{border-color:#458b79}.decision.beschikbaar strong{color:#a3f2d8}
+.decision.uitgeput{border-color:#a95757}.decision.uitgeput strong{color:#ffb1b1}
+.decision.verouderd{border-color:#a37d3b}.decision.verouderd strong{color:#ffda93}
 .lane-quotas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
 .quota-summary{padding:14px;border:1px solid var(--line);border-radius:10px;background:#101a28;min-width:0}
 .shared-warning,.source-limit{font-size:.72rem;color:var(--muted)}
-.reset-warning{color:#ffda93;font-weight:700}.model-quota{margin-top:10px}
+.reset-warning{color:#ffda93;font-weight:700}.model-quota{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.model-quota>p{font-size:.78rem;margin:4px 0 0}
 .renewal{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
 .renewal>div:last-child{grid-column:1/-1}
-.capacity{display:flex;align-items:baseline;gap:12px}
-.capacity strong{font-size:1.9rem}
-.capacity span{color:var(--muted);font-size:.8rem}
+.capacity{display:grid;gap:4px;min-width:0}
+.capacity strong{font-size:clamp(1.25rem,2.2vw,1.9rem);line-height:1.15;overflow-wrap:anywhere}
+.capacity span{color:var(--muted);font-size:.76rem;overflow-wrap:anywhere}
+.zone{display:inline-block;color:var(--muted);font-size:.72em}
 meter{display:block;width:100%;height:16px;margin:10px 0 20px;accent-color:var(--accent)}
 meter::-webkit-meter-bar{background:#27364b;border:0;border-radius:6px}
 meter::-webkit-meter-optimum-value{background:var(--accent)}
 meter::-moz-meter-bar{background:var(--accent)}
 .quota-summary dl{display:grid;grid-template-columns:1fr;gap:4px}
 .quota-summary dd,.renewal dd{font-size:.78rem}
+.source-proof{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:16px;padding:12px 14px;border-radius:10px;background:#101a28}
+.source-proof>div{min-width:0}.source-proof dd{font-size:.78rem}
 summary{cursor:pointer;padding:12px 0;color:var(--muted);font-size:.85rem}
 details dl{font-size:.85rem}
 .lower-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;margin:40px 0}
@@ -74,18 +88,18 @@ footer{padding:32px 0 40px;color:var(--muted);font-size:.85rem}
 [hidden]{display:none!important}
 .skip{position:absolute;left:12px;top:-100px}
 .skip:focus{top:12px;background:var(--bg);padding:12px;z-index:2}
-@media(max-width:1100px){.lane-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1100px){
 .source-times{grid-template-columns:repeat(2,minmax(0,1fr))}
 .processor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:640px){main,.topnav,footer{width:calc(100% - 32px)}
 .hero{padding-top:32px}
-.lane-grid,.lower-grid,.lane-quotas,.renewal{grid-template-columns:1fr}
+.lane-grid,.lower-grid,.lane-quotas,.renewal,.source-proof{grid-template-columns:1fr}
 .renewal>div:last-child{grid-column:auto}
 .metric{min-width:0;padding:14px 10px;overflow-wrap:anywhere}
 .metric dd{font-size:2rem}
 .metric dt{font-size:.62rem}
-.metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .source-times{grid-template-columns:1fr}
 .processor{padding:20px}.processor-grid{grid-template-columns:1fr}
 .section-head{display:block}
@@ -97,5 +111,5 @@ article{padding:20px}
 .lower-grid>section{padding:22px}
 }
 
-</style><script type="module" src="./meter-poll.mjs${assetQuery}" data-meter-poll></script></head><body><a class="skip" href="#main">Naar inhoud</a><nav class="topnav" aria-label="Paginanavigatie"><a href="./index.html">← Cockpit</a><span class="brand">METER</span><a href="./meter-feed.json" download="meter-feed.json">Download feed ↓</a></nav><main id="main"><header class="hero"><p class="eyebrow">CAPACITEIT &amp; CONTROLE</p><h1>Ruimte voor<br>je volgende stap.</h1><p>Zeven lanes, hun beschikbare capaciteit en de eerstvolgende resets. Gebaseerd op bronmetingen, met zichtbare grenzen aan wat we weten.</p></header><div class="filters" role="group" aria-label="Lane-filters"><label for="meter-family">Provider<select id="meter-family"><option>Alles</option><option>Claude</option><option>Codex</option><option>Gemini</option></select></label><label for="meter-status">Status<select id="meter-status"><option>Alles</option><option>ACTUEEL</option><option>VEROUDERD</option><option>ONBEKEND</option></select></label></div><noscript><p>Automatische refresh vereist JavaScript. Capaciteit en countdowns blijven ONBEKEND.</p></noscript>${renderMeter(text, { now, live: false })}</main><footer>Alleen gesaneerde aliases · bronmeting en publicatie zijn afzonderlijke momenten · tijden in UTC</footer></body></html>`;
+</style><script type="module" src="./meter-poll.mjs${assetQuery}" data-meter-poll></script></head><body><a class="skip" href="#main">Naar inhoud</a><nav class="topnav" aria-label="Paginanavigatie"><a href="./index.html">← Cockpit</a><span class="brand">METER</span><a href="./meter-feed.json" download="meter-feed.json">Download feed ↓</a></nav><main id="main"><header class="hero"><p class="eyebrow">CAPACITEIT &amp; CONTROLE</p><h1>Welke accounts<br>kunnen nu werken?</h1><p>Zeven lanes, hun afzonderlijke limietvensters en de eerstvolgende resets. Actuele quota, verouderde metingen en onbekende bindingen blijven zichtbaar van elkaar gescheiden.</p></header><div class="filters" role="group" aria-label="Lane-filters"><label for="meter-family">Provider<select id="meter-family"><option>Alles</option><option>Claude</option><option>Codex</option><option>Gemini</option></select></label><label for="meter-status">Status<select id="meter-status"><option>Alles</option><option>ACTUEEL</option><option>VEROUDERD</option><option>ONBEKEND</option></select></label></div><noscript><p>Automatische refresh vereist JavaScript. Capaciteit en countdowns blijven ONBEKEND.</p></noscript>${renderMeter(text, { now, live: false })}</main><footer>Alleen gesaneerde aliases · bronmeting en publicatie zijn afzonderlijke momenten · tijden in Europe/Amsterdam</footer></body></html>`;
 }
