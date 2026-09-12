@@ -3,11 +3,35 @@ import { meterMeasurementIsStale } from './meter-feed.mjs';
 
 const UNKNOWN = 'ONBEKEND';
 const label = value => value === 'UNKNOWN' || value == null ? UNKNOWN : value;
-const time = value => value ? `<time datetime="${value}">${value.replace('T', ' ').replace('.000Z', ' UTC')}</time>` : UNKNOWN;
+const AMSTERDAM_ZONE = 'Europe/Amsterdam';
+const amsterdamFormatter = new Intl.DateTimeFormat('nl-NL', {
+  timeZone: AMSTERDAM_ZONE, day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+const amsterdamZoneFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: AMSTERDAM_ZONE, timeZoneName: 'short',
+});
+export function formatAmsterdamTime(value) {
+  if (!value) return UNKNOWN;
+  const instant = new Date(value);
+  if (!Number.isFinite(instant.getTime())) return UNKNOWN;
+  const parts = Object.fromEntries(amsterdamFormatter.formatToParts(instant)
+    .filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  const zone = amsterdamZoneFormatter.formatToParts(instant)
+    .find(part => part.type === 'timeZoneName')?.value ?? AMSTERDAM_ZONE;
+  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}:${parts.second} ${zone}`;
+}
+const time = value => value
+  ? `<time datetime="${value}">${formatAmsterdamTime(value)} <span class="zone">Amsterdam</span></time>` : UNKNOWN;
 const detail = (name, value) => `<div><dt>${name}</dt><dd>${value}</dd></div>`;
 const family = alias => alias.startsWith('CLAUDE') ? 'Claude' : alias.startsWith('CPT') ? 'Codex' : 'Gemini';
 const modelFor = alias => alias.startsWith('CLAUDE') ? 'CLAUDE_ALL' : alias.startsWith('CPT') ? 'CODEX_ALL' : 'GEMINI_ALL';
-const duration = seconds => `${Math.floor(seconds / 86400)}d ${Math.floor(seconds % 86400 / 3600)}u`;
+const duration = seconds => {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor(seconds % 86400 / 3600);
+  const minutes = Math.floor(seconds % 3600 / 60);
+  return [days ? `${days}d` : '', hours ? `${hours}u` : '', `${minutes}m`].filter(Boolean).join(' ');
+};
 const noDate = `${UNKNOWN} <span class="source-limit">· bron levert geen datum</span>`;
 
 function errorCategory(lane) {
@@ -25,6 +49,36 @@ function ordinaryWindows(lane) {
   return lane.windows.filter(window => window.model_alias === modelFor(lane.alias));
 }
 
+function sourceQuality(lane) {
+  if (lane.status === 'ACTUEEL') return 'ACTUEEL';
+  if (lane.status === 'VEROUDERD') return 'VEROUDERD';
+  if (['SOURCE_ERROR', 'INVALID_FEED', 'INVALID_TIME', 'SHARED_POT_CONFLICT'].includes(lane.reason)) return 'FOUT';
+  return UNKNOWN;
+}
+
+function availability(lane) {
+  const windows = ordinaryWindows(lane);
+  if (lane.status === 'VEROUDERD') return {
+    state: 'VEROUDERD', title: 'Niet bevestigd', reason: 'Laatste quota is verouderd; actuele inzet is niet bevestigd.',
+  };
+  if (lane.status !== 'ACTUEEL' || lane.identity_binding_status !== 'PROVEN'
+      || lane.quality !== 'VERIFIED') return {
+    state: 'ONBEKEND', title: 'Niet bevestigd', reason: lane.identity_binding_status !== 'PROVEN'
+      ? 'Accountbinding is niet bewezen.' : 'Een actuele providerquotameting ontbreekt.',
+  };
+  const expected = ['FIVE_HOUR', 'WEEKLY'].map(windowAlias =>
+    windows.find(window => window.window_alias === windowAlias));
+  if (expected.some(window => window?.remaining_percent === 0)) return {
+    state: 'UITGEPUT', title: 'Niet inzetbaar', reason: 'Minstens één gemeten algemene limiet is op.',
+  };
+  if (expected.some(window => window?.remaining_percent == null)) return {
+    state: 'ONBEKEND', title: 'Niet bevestigd', reason: 'Niet elk algemeen limietvenster heeft een bewezen bronwaarde.',
+  };
+  return {
+    state: 'BESCHIKBAAR', title: 'Inzetbaar', reason: 'Alle gemeten algemene limieten hebben ruimte.',
+  };
+}
+
 function unanimousDate(windows, field) {
   if (!windows.length || windows.some(window => window[field] == null)) return null;
   const values = new Set(windows.map(window => window[field]));
@@ -37,7 +91,7 @@ function quotaSummary(lane, windowAlias, title, modelAlias = modelFor(lane.alias
   const available = value == null ? UNKNOWN : `${value}% beschikbaar`;
   const moment = value == null ? 'geen bewezen bronwaarde' : lane.status === 'VEROUDERD'
     ? `laatst gemeten · ${time(lane.last_success_at)}` : lane.status === 'ACTUEEL' ? 'actuele bronmeting' : 'geen bewezen meting';
-  const resetLabel = lane.status === 'VEROUDERD' ? 'Reset volgens laatste meting (UTC)' : 'Reset (UTC)';
+  const resetLabel = lane.status === 'VEROUDERD' ? 'Reset volgens laatste meting' : 'Reset';
   const countdown = lane.status === 'ACTUEEL' && window?.countdown_seconds != null
     ? `<span data-meter-countdown>${duration(window.countdown_seconds)}</span>` : UNKNOWN;
   return `<section class="quota-summary" aria-label="${lane.alias} ${title}">
@@ -79,19 +133,18 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
         : { ...window, remaining_percent: null, countdown_seconds: null, reset_at: null,
           resets_remaining: null, subscription_renewal_at: null, credit_expires_at: null }) };
   });
-  const counts = ['ACTUEEL', 'VEROUDERD', UNKNOWN].map(status =>
-    `<div class="metric"><dt>${status}</dt><dd>${lanes.filter(lane => lane.status === status).length}</dd></div>`).join('');
+  const decisions = new Map(lanes.map(lane => [lane.alias, availability(lane)]));
+  const counts = ['BESCHIKBAAR', 'UITGEPUT', 'VEROUDERD', 'ONBEKEND'].map(status =>
+    `<div class="metric ${status.toLowerCase()}"><dt>${status}</dt><dd>${lanes.filter(lane => decisions.get(lane.alias).state === status).length}</dd></div>`).join('');
   const newest = lanes.map(lane => lane.last_success_at).filter(Boolean).sort().at(-1);
   const age = live && newest ? `${Math.max(0, Math.floor((now - new Date(newest)) / 1000))}s` : UNKNOWN;
   const refresh = !live ? 'Wacht op browsermeting' : refreshStatus === 'waiting' ? 'Eerste meting ophalen'
     : fallback ? 'Poll mislukt · automatisch herstel actief' : refreshStatus === 'active' ? 'Actief · iedere 5 seconden' : 'Live actualisering niet geactiveerd.';
-  const eligible = lanes.flatMap(lane => {
-    const session = ordinaryWindows(lane).find(window => window.window_alias === 'FIVE_HOUR');
-    return lane.status === 'ACTUEEL' && session?.quota_group === 'LANE_LOCAL' && session.remaining_percent != null
-      ? [{ alias: lane.alias, value: session.remaining_percent }] : [];
-  }).sort((a, b) => b.value - a.value || a.alias.localeCompare(b.alias));
-  const highestCapacity = eligible.length ? `${eligible[0].alias} · ${eligible[0].value}% beschikbaar` : UNKNOWN;
+  const ready = lanes.filter(lane => decisions.get(lane.alias).state === 'BESCHIKBAAR')
+    .map(lane => lane.alias);
+  const directCapacity = ready.length ? ready.join(', ') : 'GEEN';
   const cards = lanes.map(lane => {
+    const decision = decisions.get(lane.alias);
     const ordinary = ordinaryWindows(lane);
     const renewal = unanimousDate(ordinary, 'subscription_renewal_at');
     const expiry = unanimousDate(ordinary, 'credit_expires_at');
@@ -100,19 +153,21 @@ export function renderMeter(text, { live = true, now = new Date(), fallback = fa
     const resetReserveText = resetReserve === null ? UNKNOWN : resetReserve === 0
       ? '<span class="reset-warning">geen resetreserve</span>' : `${resetReserve} beschikbaar`;
     const spark = lane.windows.some(window => window.model_alias === 'CODEX_SPARK')
-      ? `<details class="model-quota"><summary>CODEX_SPARK</summary><div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Spark sessie', 'CODEX_SPARK')}${quotaSummary(lane, 'WEEKLY', 'Spark week', 'CODEX_SPARK')}</div></details>` : '';
-    return `<article data-meter-lane="${lane.alias}" data-family="${family(lane.alias)}" data-status="${lane.status}" aria-labelledby="lane-${lane.alias}">
+      ? `<section class="model-quota" aria-label="${lane.alias} aparte Spark-quota"><h4>Aparte modelquota: CODEX_SPARK</h4><p>Deze quota verandert de algemene inzetbaarheid hierboven niet.</p><div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Spark sessie', 'CODEX_SPARK')}${quotaSummary(lane, 'WEEKLY', 'Spark week', 'CODEX_SPARK')}</div></section>` : '';
+    return `<article data-meter-lane="${lane.alias}" data-family="${family(lane.alias)}" data-status="${lane.status}" data-availability="${decision.state}" aria-labelledby="lane-${lane.alias}">
       <header class="lane-head"><div><p class="eyebrow">${family(lane.alias)}</p><h3 id="lane-${lane.alias}">${lane.alias}</h3></div><span class="badge ${lane.status.toLowerCase()}">${lane.status}</span></header>
+      <div class="decision ${decision.state.toLowerCase()}"><strong>${decision.title}</strong><span>${decision.reason}</span></div>
       <div class="lane-quotas">${quotaSummary(lane, 'FIVE_HOUR', 'Huidige sessie')}${quotaSummary(lane, 'WEEKLY', 'Gewone week')}</div>${spark}
-      <p class="shared-warning">Gedeelde quota worden niet opgeteld.</p><dl class="renewal">${detail('Resetreserve', resetReserveText)}${detail(lane.status === 'VEROUDERD' ? 'Abonnementsverlenging (laatst gemeten)' : 'Abonnementsverlenging', renewal ? time(renewal) : noDate)}${detail(lane.status === 'VEROUDERD' ? 'Creditverval (laatst gemeten)' : 'Creditverval', expiry ? time(expiry) : noDate)}${detail('API-kosten / credits', `${UNKNOWN} · bron levert geen kostengegevens`)}</dl>
+      <dl class="source-proof">${detail('Accountbinding', label(lane.identity_binding_status))}${detail('Bronkwaliteit', sourceQuality(lane))}${detail('Laatste succesvolle bronmeting', time(lane.last_success_at))}${detail('Laatste meetpoging', time(lane.attempted_at))}${detail('Taakuitvoering bewezen', `${UNKNOWN} · niet aanwezig in deze feed`)}</dl>
+      <p class="shared-warning">Vensters en modelquota worden nooit bij elkaar opgeteld.</p><dl class="renewal">${detail('Resetreserve', resetReserveText)}${detail(lane.status === 'VEROUDERD' ? 'Abonnementsverlenging (laatst gemeten)' : 'Abonnementsverlenging', renewal ? time(renewal) : noDate)}${detail(lane.status === 'VEROUDERD' ? 'Creditverval (laatst gemeten)' : 'Creditverval', expiry ? time(expiry) : noDate)}${detail('API-kosten / credits', `${UNKNOWN} · bron levert geen kostengegevens`)}</dl>
       <details><summary>Bron, fout &amp; betrouwbaarheid</summary><dl>${detail('Foutcategorie', errorCategory(lane))}${detail('Brontype', label(lane.source_kind))}${detail('Bronkwaliteit', label(lane.quality))}${detail('Binding', label(lane.identity_binding_status))}${detail('Laatste succes', time(lane.last_success_at))}${detail('Laatste poging', time(lane.attempted_at))}${detail('Actuele fout', label(lane.reason))}${detail('Beperking', label(lane.limitation))}</dl></details></article>`;
   }).join('');
   const resets = lanes.flatMap(lane => ordinaryWindows(lane)
     .filter(window => lane.status === 'ACTUEEL' && window.reset_at && window.countdown_seconds != null)
     .map(window => ({ ...window, alias: lane.alias })))
     .sort((a, b) => a.reset_at.localeCompare(b.reset_at) || a.alias.localeCompare(b.alias));
-  const calendar = resets.map(window => `<li><time datetime="${window.reset_at}">${window.reset_at.replace('T', ' ').replace('.000Z', ' UTC')}</time><strong>${window.alias}</strong><span>${window.window_alias} · <span data-meter-countdown>${duration(window.countdown_seconds)}</span></span></li>`).join('');
-  return `<div id="meter"><section aria-labelledby="overview-heading"><h2 id="overview-heading">In één oogopslag</h2><p class="legend"><strong>Legenda:</strong> 100% = volledig beschikbaar · 0% = op / verbruikt.</p><dl class="metrics">${counts}</dl><dl class="source-times">${detail('Laatste publicatie', time(feed.published_at))}${detail('Nieuwste bronmeting', time(newest))}${detail('Meetleeftijd', age)}${detail('Automatische refresh', refresh)}${detail('Hoogste sessiecapaciteit', highestCapacity)}${detail('Trend / delta', `${UNKNOWN} · minimaal twee bewezen metingen nodig`)}${detail('Historie / export', '<a href="./meter-feed.json" download>Gesaneerde feed downloaden</a>')}</dl></section>
-    ${processorPanel}<section aria-labelledby="lanes-heading"><div class="section-head"><h2 id="lanes-heading">Je zeven lanes</h2><p>Sessie en gewone week · % beschikbaar</p></div><div class="lane-grid">${cards}</div><p id="meter-filter-empty" hidden>Geen lanes voor deze selectie.</p></section>
-    <div class="lower-grid"><section aria-labelledby="resets-heading"><p class="eyebrow">VOORUITKIJKEN</p><h2 id="resets-heading">Resetkalender</h2><p>Alleen actuele, toekomstige resets · UTC</p><ol class="timeline">${calendar || `<li>${UNKNOWN}</li>`}</ol></section><section aria-labelledby="health-heading"><p class="eyebrow">BETROUWBAARHEID</p><h2 id="health-heading">Metergezondheid</h2><dl>${detail('Feed', feed.available ? 'GELDIG' : UNKNOWN)}${detail('Verbinding', !live || refreshStatus === 'waiting' ? UNKNOWN : fallback ? 'VEROUDERD' : refreshStatus === 'active' ? 'BEREIKBAAR' : UNKNOWN)}${detail('Bronnen actueel', String(lanes.filter(lane => lane.status === 'ACTUEEL').length))}</dl><p>Na twaalf minuten blijven bewezen percentages en resetdatums zichtbaar als laatst gemeten. De countdown stopt totdat een nieuwe bronmeting slaagt.</p></section></div></div>`;
+  const calendar = resets.map(window => `<li>${time(window.reset_at)}<strong>${window.alias}</strong><span>${window.window_alias} · <span data-meter-countdown>${duration(window.countdown_seconds)}</span></span></li>`).join('');
+  return `<div id="meter"><section aria-labelledby="overview-heading"><h2 id="overview-heading">In één oogopslag</h2><p class="legend"><strong>Beslisregel:</strong> een account is pas inzetbaar als binding en bronmeting actueel zijn en geen gemeten algemene limiet op nul staat. Aparte modelquota tellen niet als algemene capaciteit.</p><dl class="metrics">${counts}</dl><dl class="source-times">${detail('Direct inzetbaar', directCapacity)}${detail('Laatste publicatie', time(feed.published_at))}${detail('Nieuwste bronmeting', time(newest))}${detail('Meetleeftijd', age)}${detail('Automatische refresh', refresh)}${detail('Trend / delta', `${UNKNOWN} · minimaal twee bewezen metingen nodig`)}${detail('Historie / export', '<a href="./meter-feed.json" download>Gesaneerde feed downloaden</a>')}</dl></section>
+    ${processorPanel}<section aria-labelledby="lanes-heading"><div class="section-head"><h2 id="lanes-heading">Je acht lanes</h2><p>Sessie en gewone week · % beschikbaar</p></div><div class="lane-grid">${cards}</div><p id="meter-filter-empty" hidden>Geen lanes voor deze selectie.</p></section>
+    <div class="lower-grid"><section aria-labelledby="resets-heading"><p class="eyebrow">VOORUITKIJKEN</p><h2 id="resets-heading">Resetkalender</h2><p>Alleen actuele, toekomstige resets · Europe/Amsterdam</p><ol class="timeline">${calendar || `<li>${UNKNOWN}</li>`}</ol></section><section aria-labelledby="health-heading"><p class="eyebrow">BETROUWBAARHEID</p><h2 id="health-heading">Metergezondheid</h2><dl>${detail('Feed', feed.available ? 'GELDIG' : UNKNOWN)}${detail('Verbinding', !live || refreshStatus === 'waiting' ? UNKNOWN : fallback ? 'VEROUDERD' : refreshStatus === 'active' ? 'BEREIKBAAR' : UNKNOWN)}${detail('Bronnen actueel', String(lanes.filter(lane => lane.status === 'ACTUEEL').length))}</dl><p>Na twaalf minuten blijven bewezen percentages en resetdatums zichtbaar als laatst gemeten. De countdown stopt totdat een nieuwe bronmeting slaagt. Een verstreken reset bewijst nooit nieuwe ruimte zonder een nieuwe providerwaarneming.</p></section></div></div>`;
 }
