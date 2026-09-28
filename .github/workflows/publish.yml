@@ -180,7 +180,7 @@ jobs:
           # De pagina toont dat zichtbaar; er wordt nooit een oude groene stand hergebruikt.
           GH_TOKEN: ${{ secrets.ORG_PR_READ_TOKEN || github.token }}
         # Build emits standalone meter.html, one sanitized meter-feed.json and same-origin modules.
-        # Missing producer input remains seven UNKNOWN lanes; never synthesize quotas.
+        # Missing producer input remains eight UNKNOWN lanes; never synthesize quotas.
         # Upload/deploy below publish the complete directory as one Pages artifact.
         run: |
           node scripts/build.mjs
