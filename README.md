@@ -150,11 +150,11 @@ uitvoering daarvan. Vastgelegd als DEC in `stack-control`.
 
 METER heeft een afzonderlijk gesloten contract in `data/meter-feed.schema.json`.
 `node scripts/build.mjs --meter-feed <lokaal-bestand>` consumeert uitsluitend dit
-expliciete bestand; ontbrekende of ongeldige input toont altijd de zeven vaste
-aliases CLAUDE1–CLAUDE4, CPT1, CPT2 en GEMINI1 als ONBEKEND. Geen ruwe feed,
+expliciete bestand; ontbrekende of ongeldige input toont altijd de acht vaste
+aliases CLAUDE1–CLAUDE4, CPT1, CPT2, CPT3 en GEMINI1 als ONBEKEND. Geen ruwe feed,
 bronpad, accountinformatie of providerfout wordt geëxporteerd.
 
-Elke lane heeft een eigen `last_success_at`; na vijf minuten is de meting
+Elke lane heeft een eigen `last_success_at`; vanaf twaalf minuten is de meting
 VEROUDERD. Tijdstempels zijn canonieke UTC ISO-strings met milliseconden.
 `published_at` is alleen publicatieleeftijd. Alleen CURRENT met PROVEN binding,
 passend product en een geldige toekomstige reset krijgt een countdown. De
@@ -168,7 +168,7 @@ METER gebruikt dezelfde validator en cockpit/sanitizepoort. Een eigen contract
 is nodig omdat runtime vrije tekst en andere identiteiten toestaat. Geen nieuwe
 afhankelijkheden of externe zoekactie: deze order is uitsluitend lokaal.
 
-De standaard Pages-build schrijft één gesloten `meter-feed.json` met alle zeven
+De standaard Pages-build schrijft één gesloten `meter-feed.json` met alle acht
 lanes en neemt de volledige browser-importboom op in de publicatie-allowlist.
 De cockpit start `meter-poll.mjs`: same-origin, relatief aan de pagina (ook onder
 `/stack-dashboard/`), zonder credentials of redirects. Polls zijn serieel, starten
@@ -179,19 +179,19 @@ herlaadt iedere 900 seconden, zodat polls en backoff niet elke tien seconden
 worden afgebroken; overige statische panelen volgen die herlaadcadans. Zonder JavaScript
 blijft de veilige statische momentopname zichtbaar.
 
-Atomisch contract: een producer levert het volledige bestaande v1-feedobject
+Atomisch contract: een producer levert het volledige bestaande v2-feedobject
 als één lokaal bestand via `--meter-feed`; de build leest het één keer en
 reconstrueert uitsluitend de gesloten publieke velden. Ruwe input en afgeleide
 countdowns worden nooit gekopieerd. De bestaande workflow uploadt en deployt de
 volledige gecontroleerde publicatiemap als één Pages-artefact. Geen losse PUTs per
-lane, geen tweede host of scheduler. De browser vervangt alle zeven rijen uit één
+lane, geen tweede host of scheduler. De browser vervangt alle acht rijen uit één
 volledige respons. CDN-vertraging kan een oude snapshot opleveren; publicatietijd
 vernieuwt daarom nooit een bronmeting.
 
-De workflow heeft nog geen aangewezen producerbestand: de standaardfeed blijft
-ONBEKEND. Deze lokale integratie voegt geen collector/providercall toe en bewijst
-geen live deploy of verse quotadata. Publicatie/activatie en producerbinding blijven
-aparte gates na CODEX1-review.
+De bestaande vijfminutengenerator publiceert het producerbestand via de private
+`dashboard-feeds`-route; een standaardbuild zonder leesbare, contractgeldige feed
+blijft ONBEKEND. De dashboardcode zelf doet geen providercall. Publicatie,
+bronactualiteit en accountbinding blijven afzonderlijke bewijspoorten.
 
 `renderMeter` onderscheidt `live` (default true, gebruikt door `meter-poll.mjs`
 bij elke tick tegen de echte klok) van `live: false`, de vorm die
@@ -211,16 +211,17 @@ De bestaande Pages-build publiceert de pagina, dezelfde gesaneerde v2
 `meter-feed.json` en de bestaande browsermodules in één artefact. Er is geen
 nieuwe collector of hostingroute. De download bevat uitsluitend de gesloten DTO.
 
-De zeven lane-kaarten zijn filterbaar op provider en status. Filters verbergen
+De acht lane-kaarten zijn filterbaar op provider en status. Filters verbergen
 kaarten visueel; de feed, globale tellers en resetkalender behouden alle lanes.
 Resetkalender, abonnementen/credits en brongezondheid gebruiken uitsluitend
 geverifieerde velden. Zonder historie staat er `ONVOLDOENDE METINGEN`; ontbrekende
 waarden blijven `ONBEKEND`. Gemini blijft onbekend zolang de binding onbewezen is.
-Alle datums tonen UTC; publicatie en bronmeting zijn afzonderlijk zichtbaar.
+De wire bewaart UTC; de pagina toont Europe/Amsterdam met zone-afkorting.
+Publicatie en bronmeting zijn afzonderlijk zichtbaar.
 
 De statische pagina toont nooit actuele percentages of countdowns. In de browser
 wordt dezelfde parser bij iedere seconde opnieuw toegepast, met een same-origin
 poll iedere vijf seconden, timeout van acht seconden en begrensde retry-backoff.
-Op vijf minuten bronleeftijd of bij polluitval verdwijnen capaciteit en countdowns;
+Vanaf twaalf minuten bronleeftijd of bij polluitval verdwijnen actuele capaciteit en countdowns;
 verse geldige invoer herstelt zonder reload. Zonder JavaScript blijven waarden
 onbekend. Provider- en statusfilters behouden hun selectie tijdens verversen.

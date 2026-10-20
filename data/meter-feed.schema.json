@@ -53,6 +53,9 @@
         "CPT2": {
           "$ref": "#/$defs/Lane"
         },
+        "CPT3": {
+          "$ref": "#/$defs/Lane"
+        },
         "GEMINI1": {
           "$ref": "#/$defs/Lane"
         }
