@@ -1,6 +1,6 @@
 /** Closed public DTO. No account identifiers, arbitrary strings or quota totals. */
 import { validate } from './validate.mjs';
-export const METER_ALIASES = Object.freeze(['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2', 'GEMINI1']);
+export const METER_ALIASES = Object.freeze(['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2', 'CPT3', 'GEMINI1']);
 export const METER_STALE_MS = 720_000;
 export const PROCESSOR_STALE_MS = 1_200_000;
 function freeze(value) {
@@ -60,6 +60,9 @@ export const METER_FEED_SCHEMA = freeze({
           "$ref": "#/$defs/Lane"
         },
         "CPT2": {
+          "$ref": "#/$defs/Lane"
+        },
+        "CPT3": {
           "$ref": "#/$defs/Lane"
         },
         "GEMINI1": {
@@ -376,6 +379,9 @@ export function meterMeasurementIsStale(lastSuccessAt, nowMs) {
 const unknown = alias => ({ alias, identity_binding_status: 'UNKNOWN', source_kind: 'UNKNOWN',
   quality: 'UNKNOWN', reason: 'INVALID_FEED', limitation: 'UNKNOWN', freshness: 'ONBEKEND',
   last_success_at: null, attempted_at: null, windows: [] });
+const transitionalCpt3 = () => ({ identity_binding_status: 'UNKNOWN', source_kind: 'UNKNOWN',
+  quality: 'UNKNOWN', reason: 'BINDING_UNPROVEN', limitation: 'BINDING_UNPROVEN',
+  last_success_at: null, attempted_at: null, windows: [] });
 const dates = ['reset_at', 'subscription_renewal_at', 'credit_expires_at'];
 const unknownProcessor = () => ({ host_alias: 'UNKNOWN', host_kind: 'UNKNOWN', observed_at: null,
   published_at: null, freshness: 'UNKNOWN', capacity_cores: null, cpu_busy_percent: null,
@@ -441,7 +447,7 @@ export function parseMeterFeed(raw, { now = new Date(), fallback = false } = {})
     }
     return { available: true, published_at: raw.published_at, processor: parseProcessor(raw.processor, nowMs, fallback),
       lanes: METER_ALIASES.map(alias => {
-        const lane = raw.lanes[alias];
+        const lane = raw.lanes[alias] ?? (alias === 'CPT3' ? transitionalCpt3() : null);
         const sourceOk = alias.startsWith('CLAUDE') ? lane.source_kind === 'CLAUDE_SUBSCRIPTION'
           : alias.startsWith('CPT') ? lane.source_kind === 'CODEX_SUBSCRIPTION'
             : ['GEMINI_API_KEY', 'GEMINI_CODE_ASSIST', 'GEMINI_VERTEX'].includes(lane.source_kind);

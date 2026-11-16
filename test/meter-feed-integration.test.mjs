@@ -51,7 +51,7 @@ console.log(JSON.stringify({ encoding: 'base64', content: Buffer.from(process.en
       if (body === JSON.stringify(valid)) assert.deepEqual(result.raw, valid);
       else {
         assert.equal(result.raw, null);
-        assert.deepEqual(result.qualities, Array(7).fill('UNKNOWN'));
+        assert.deepEqual(result.qualities, Array(8).fill('UNKNOWN'));
         assert.ok(!output.includes('B2_PRIVATE_SENTINEL'));
       }
     }
@@ -63,7 +63,7 @@ test('cockpit has only navigation; standalone static page fails closed', () => {
   assert.match(cockpit, /href=".\/meter.html"/);
   assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
   const html = renderMeterPage(text, { now: new Date(instant) });
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
   assert.doesNotMatch(html, /data-meter-countdown|50%|data-status="ACTUEEL"/);
   assert.match(renderMeter(text, { now: new Date(instant) }), /data-meter-countdown/);
 });
@@ -126,7 +126,7 @@ test('poll errors, malformed and oversized bodies degrade cached data and hide p
     assert.match(html, /42.5%/);
     assert.match(html, /Status<\/dt><dd>ONBEKEND/);
     assert.ok(!html.includes('private provider failure'));
-    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
   }
 });
 
@@ -163,7 +163,7 @@ test('browser import graph is local and executable without Node globals; publica
 });
 
 
-test('Pages subpath, empty/private feeds, stale and recovery replace exactly seven lanes atomically', async () => {
+test('Pages subpath, empty/private feeds, stale and recovery replace exactly eight lanes atomically', async () => {
   let html; let body = text; let clock = new Date(instant);
   const poll = createMeterPoller({ origin: 'https://pages.invalid',
     pageUrl: 'https://pages.invalid/stack-dashboard/index.html?v=123', now: () => clock,
@@ -173,7 +173,7 @@ test('Pages subpath, empty/private feeds, stale and recovery replace exactly sev
     } });
   for (const bad of ['', '{}', '{', JSON.stringify({ ...JSON.parse(text), email: 'private@example.invalid' })]) {
     body = bad; assert.equal(await poll.pollOnce(), false);
-    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
     assert.ok(!html.includes('data-meter-countdown'));
     assert.ok(!html.includes('private@'));
   }
@@ -211,12 +211,12 @@ test('actual browser scheduler ticks during outages and retries with recovery ba
   fail = false; await run(20000); assert.ok(html.includes('data-meter-countdown'));
   current = new Date('2026-09-10T09:12:00.000Z'); await run(1000);
   assert.ok(!html.includes('data-meter-countdown'));
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
   stop(); assert.equal(timers.size, 0);
 });
 
 
-test('partial streamed snapshot never replaces a subset of the seven lanes', async () => {
+test('partial streamed snapshot never replaces a subset of the eight lanes', async () => {
   let stream; let html; let renders = 0;
   const poll = createMeterPoller({ origin: 'https://pages.invalid', now: () => new Date(instant),
     render: value => { html = value; renders++; },
@@ -230,7 +230,7 @@ test('partial streamed snapshot never replaces a subset of the seven lanes', asy
   assert.equal(renders, 1); assert.equal(html, initial);
   stream.enqueue(bytes.slice(split)); stream.close();
   assert.equal(await pending, true); assert.equal(renders, 2);
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
   assert.ok(html.includes('data-meter-countdown'));
 });
 

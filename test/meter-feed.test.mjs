@@ -11,13 +11,25 @@ const fixture = () => JSON.parse(readFileSync(new URL('./fixtures/meter-feed/cur
 const now = new Date('2026-09-10T09:01:00.000Z');
 const parse = (raw, options = {}) => parseMeterFeed(raw, { now, ...options });
 
-test('closed schema mirrors browser contract and exact seven required aliases', () => {
+test('closed schema mirrors the browser contract and normalizes the transitional seven-lane wire to eight aliases', () => {
   assert.deepEqual(METER_FEED_SCHEMA, JSON.parse(readFileSync('data/meter-feed.schema.json')));
   assert.deepEqual(auditSchema(METER_FEED_SCHEMA), []);
   assert.deepEqual(validate(METER_FEED_SCHEMA, fixture()), []);
-  for (const alias of METER_ALIASES) {
+  assert.deepEqual(METER_ALIASES,
+    ['CLAUDE1', 'CLAUDE2', 'CLAUDE3', 'CLAUDE4', 'CPT1', 'CPT2', 'CPT3', 'GEMINI1']);
+  const transitional = parse(fixture());
+  assert.equal(transitional.available, true);
+  assert.deepEqual(transitional.lanes[6], { alias: 'CPT3', identity_binding_status: 'UNKNOWN',
+    source_kind: 'UNKNOWN', quality: 'UNKNOWN', reason: 'BINDING_UNPROVEN',
+    limitation: 'BINDING_UNPROVEN', freshness: 'ONBEKEND', last_success_at: null,
+    attempted_at: null, windows: [] });
+  const current = fixture(); current.lanes.CPT3 = structuredClone(current.lanes.CPT2);
+  assert.equal(parse(current).lanes[6].quality, 'VERIFIED');
+  for (const alias of METER_ALIASES.filter(alias => alias !== 'CPT3')) {
     const raw = fixture(); delete raw.lanes[alias]; assert.equal(parse(raw).available, false);
   }
+  const withoutCpt3 = fixture(); delete withoutCpt3.lanes.CPT3;
+  assert.equal(parse(withoutCpt3).lanes[6].reason, 'BINDING_UNPROVEN');
   const raw = fixture(); raw.lanes.EXTRA = raw.lanes.CPT1; assert.equal(parse(raw).available, false);
   assert.throws(() => { METER_FEED_SCHEMA.additionalProperties = true; });
 });
@@ -39,14 +51,14 @@ test('processor is optional, closed and becomes stale after twenty minutes witho
   assert.equal(parse(absent).processor.cpu_busy_percent, null);
 });
 
-test('processor unsupported, invalid or private input stays empty without affecting seven-lane shape', () => {
+test('processor unsupported, invalid or private input stays empty without affecting eight-lane shape', () => {
   for (const mutate of [
     raw => { raw.processor.status_reason = 'UNSUPPORTED'; raw.processor.capacity_cores = null; },
     raw => { raw.processor.host_alias = 'UNKNOWN'; },
     raw => { raw.processor.observed_at = '2026-09-10T09:01:01.000Z'; },
   ]) {
     const raw = fixture(); mutate(raw); const parsed = parse(raw);
-    assert.equal(parsed.lanes.length, 7);
+    assert.equal(parsed.lanes.length, 8);
     assert.equal(parsed.processor.freshness, 'UNKNOWN');
     assert.equal(parsed.processor.cpu_busy_percent, null);
   }
@@ -54,14 +66,14 @@ test('processor unsupported, invalid or private input stays empty without affect
     const raw = fixture(); raw.processor[key] = value;
     const rendered = renderMeter(JSON.stringify(raw), { now });
     assert.ok(!rendered.includes(String(value)));
-    assert.equal((rendered.match(/data-meter-lane=/g) ?? []).length, 7);
+    assert.equal((rendered.match(/data-meter-lane=/g) ?? []).length, 8);
   }
 });
 
-test('empty malformed stale sources always render exactly seven fixed aliases', () => {
+test('empty malformed stale sources always render exactly eight fixed aliases', () => {
   for (const text of [null, '', '{', '{}', JSON.stringify(fixture())]) {
     const html = renderMeter(text, { now: new Date('2026-09-11T09:00:00.000Z') });
-    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+    assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
     for (const alias of METER_ALIASES) assert.ok(html.includes(`data-meter-lane="${alias}"`));
     assert.ok(!html.includes('data-meter-countdown'));
   }
@@ -104,7 +116,7 @@ test('binding mismatch and shared pools never produce a sum; Gemini products rem
     raw.lanes.GEMINI1.source_kind = product;
     for (const binding of ['UNKNOWN', 'MISMATCH', 'PROVEN']) {
       raw.lanes.GEMINI1.identity_binding_status = binding;
-      const lane = parse(raw).lanes[6];
+      const lane = parse(raw).lanes[7];
       assert.equal(lane.source_kind, product);
       assert.equal(lane.freshness, 'ONBEKEND');
     }
@@ -142,7 +154,7 @@ test('private fields, free error text, paths, emails and tokens cannot be export
   assert.equal(meterFeedFromText(' '.repeat(32769)).available, false);
 });
 
-test('v1, malformed, oversized and additional fields fail atomically to seven UNKNOWN lanes', () => {
+test('v1, malformed, oversized and additional fields fail atomically to eight UNKNOWN lanes', () => {
   const v1 = fixture(); v1.version = 1;
   const bad = [null, '{', JSON.stringify(v1), ' '.repeat(32769)];
   for (const location of ['root', 'lane', 'window']) {
@@ -152,7 +164,7 @@ test('v1, malformed, oversized and additional fields fail atomically to seven UN
   }
   for (const text of bad) {
     const feed = meterFeedFromText(text, { now });
-    assert.equal(feed.available, false); assert.equal(feed.lanes.length, 7);
+    assert.equal(feed.available, false); assert.equal(feed.lanes.length, 8);
     assert.ok(feed.lanes.every(l => l.quality === 'UNKNOWN' && l.windows.length === 0));
     assert.ok(!renderMeter(text, { now }).includes('never-export-this'));
   }
@@ -352,7 +364,8 @@ test('published stale UNKNOWN-quality observations survive three build/parser ro
       assert.equal(lane.windows[0].reset_at, '2026-09-10T10:00:00.000Z', `${lane.alias} round ${round}`);
       assert.equal(lane.windows[0].countdown_seconds, null, `${lane.alias} round ${round}`);
     }
-    assert.equal(parsed.lanes[6].windows[0].remaining_percent, null);
+    assert.equal(parsed.lanes[6].reason, 'BINDING_UNPROVEN');
+    assert.equal(parsed.lanes[7].windows[0].remaining_percent, null);
     const html = renderMeter(text, { now: at, refreshStatus: 'active' });
     assert.match(html, /data-processor-status="CURRENT"/);
     assert.equal((html.match(/50%/g) ?? []).length, 12);
@@ -391,7 +404,7 @@ test('unproven Gemini never yields quota even when input asserts generic PROVEN'
     const raw = fixture(); Object.assign(raw.lanes.GEMINI1, { source_kind: product,
       identity_binding_status: 'PROVEN', quality: 'VERIFIED', reason: 'NONE', limitation: 'NONE' });
     Object.assign(raw.lanes.GEMINI1.windows[0], { remaining_percent: 90, reset_at: '2026-09-10T10:00:00.000Z' });
-    const lane = parse(raw).lanes[6];
+    const lane = parse(raw).lanes[7];
     assert.equal(lane.reason, 'BINDING_UNPROVEN'); assert.equal(lane.quality, 'UNKNOWN');
     assert.equal(lane.windows[0].remaining_percent, null); assert.equal(lane.windows[0].reset_at, null);
   }
@@ -402,11 +415,11 @@ test('closed Gemini public aliases accept UNKNOWN duration but reject future ali
     const raw = fixture(); Object.assign(raw.lanes.GEMINI1, { source_kind: 'GEMINI_CODE_ASSIST', identity_binding_status: 'PROVEN', quality: 'VERIFIED', reason: 'NONE', limitation: 'NONE' });
     Object.assign(raw.lanes.GEMINI1.windows[0], { model_alias, window_alias: 'UNKNOWN', quota_group: 'LANE_LOCAL', remaining_percent: 55 });
     const parsed = parseMeterFeed(raw, { now });
-    assert.equal(parsed.lanes[6].windows[0].model_alias, model_alias);
-    assert.equal(parsed.lanes[6].windows[0].remaining_percent, null);
+    assert.equal(parsed.lanes[7].windows[0].model_alias, model_alias);
+    assert.equal(parsed.lanes[7].windows[0].remaining_percent, null);
   }
   const raw = fixture(); raw.lanes.GEMINI1.windows[0].model_alias = 'GEMINI_FUTURE';
-  assert.equal(parseMeterFeed(raw, { now }).lanes[6].reason, 'INVALID_FEED');
+  assert.equal(parseMeterFeed(raw, { now }).lanes[7].reason, 'INVALID_FEED');
 });
 
 test('invalid dates, duplicate windows and incorrect model bindings are closed', () => {

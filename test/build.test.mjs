@@ -300,7 +300,7 @@ test('METER wire snapshot roundtrips closed schema, strips private input and ret
     const wire = meterSnapshot(input, now);
     const serialized = JSON.stringify(wire);
     assert.equal(meterFeedFromText(serialized, { now }).available, true);
-    assert.equal(Object.keys(wire.lanes).length, 7);
+    assert.equal(Object.keys(wire.lanes).length, 8);
     assert.ok(!serialized.includes('private-account'));
     assert.ok(!serialized.includes('countdown_seconds'));
   }
@@ -321,7 +321,7 @@ test('standalone METER owns same-origin script and cockpit only links to it', as
   assert.match(html, /script type="module" src=".\/meter-poll.mjs" data-meter-poll/);
   assert.match(html, /script-src 'self'/);
   assert.match(html, /connect-src 'self'/);
-  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 7);
+  assert.equal((html.match(/data-meter-lane=/g) ?? []).length, 8);
   for (const clientPollOrigin of [null, 'https://runtime.invalid']) {
     const cockpit = renderCockpit({ generatedAt: '2026-09-10T09:01:00.000Z', sources: [] }, { clientPollOrigin });
     assert.doesNotMatch(cockpit, /data-meter-lane|meter-poll/);
